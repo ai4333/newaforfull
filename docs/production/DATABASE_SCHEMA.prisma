@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  VENDOR
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PENDING
+  PAID
+  ACCEPTED
+  READY
+  COMPLETED
+  REJECTED
+  DISPUTED
+  CANCELLED
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String    @unique
+  role          Role      @default(STUDENT)
+  createdAt     DateTime  @default(now())
+
+  orders         Order[] @relation("StudentOrders")
+  vendorProfile  VendorProfile?
+  logs           ActivityLog[]
+}
+
+model VendorProfile {
+  id       String @id @default(uuid())
+  userId   String @unique
+  shopName String
+
+  user    User   @relation(fields: [userId], references: [id])
+  orders  Order[]
+  payouts Payout[]
+}
+
+model Order {
+  id               String   @id @default(uuid())
+  studentId        String
+  vendorId         String
+
+  baseAmount       Float
+  studentFee       Float
+  vendorFee        Float
+  totalPaid        Float
+  vendorEarning    Float
+  platformRevenue  Float
+
+  razorpayOrderId  String?
+  razorpayPaymentId String?
+  status           OrderStatus @default(PENDING)
+
+  createdAt        DateTime @default(now())
+
+  student User @relation("StudentOrders", fields: [studentId], references: [id])
+  vendor  VendorProfile @relation(fields: [vendorId], references: [id])
+  files   OrderFile[]
+}
+
+model OrderFile {
+  id        String   @id @default(uuid())
+  orderId   String
+  fileUrl   String
+  fileName  String
+  fileSize  Int
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+model Payout {
+  id         String   @id @default(uuid())
+  vendorId   String
+  amount     Float
+  status     PayoutStatus @default(PENDING)
+  paidAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  vendor VendorProfile @relation(fields: [vendorId], references: [id])
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  ip        String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}

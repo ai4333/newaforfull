@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   description: "High-fidelity campus printing and delivery engine.",
 };
 
+import { Providers } from "@/components/Providers";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -22,7 +24,9 @@ export default function RootLayout({
         <Script src="https://cdn.tailwindcss.com/3.4.17" strategy="beforeInteractive" />
       </head>
       <body>
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

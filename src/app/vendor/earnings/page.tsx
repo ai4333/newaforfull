@@ -1,12 +1,43 @@
 "use client";
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+
+type PayoutRow = {
+    id: string;
+    createdAt: string;
+    paidAt: string | null;
+    amount: number;
+    status: "PENDING" | "PAID";
+};
 
 export default function EarningsPage() {
-    const payouts = [
-        { id: "PAY-99281", date: "Oct 28, 2025", amount: "₹4,200", status: "COMPLETED", method: "UPI-Direct" },
-        { id: "PAY-99215", date: "Oct 21, 2025", amount: "₹3,850", status: "COMPLETED", method: "Bank Transfer" },
-        { id: "PAY-99150", date: "Oct 14, 2025", amount: "₹5,100", status: "COMPLETED", method: "UPI-Direct" },
-    ];
+    const [payouts, setPayouts] = useState<PayoutRow[]>([]);
+    const [pendingAmount, setPendingAmount] = useState(0);
+    const [lifetimeEarnings, setLifetimeEarnings] = useState(0);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const res = await fetch('/api/vendor/payouts');
+                if (res.ok) {
+                    const data = await res.json();
+                    setPayouts(data.payouts || []);
+                    setPendingAmount(data.pendingAmount || 0);
+                    setLifetimeEarnings(data.lifetimeEarnings || 0);
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, []);
+
+    const monthSales = useMemo(() => {
+        const currentMonth = new Date().getMonth();
+        return payouts
+            .filter((row) => new Date(row.createdAt).getMonth() === currentMonth)
+            .reduce((sum, row) => sum + row.amount, 0);
+    }, [payouts]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -15,17 +46,17 @@ export default function EarningsPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
                 <div className="paper-sheet" style={{ padding: '24px' }}>
                     <div className="label" style={{ fontSize: '9px', opacity: 0.5, marginBottom: '8px' }}>PENDING PAYOUT</div>
-                    <div className="fraunces text-ink" style={{ fontSize: '1.8rem', fontWeight: 900 }}>₹2,450.00</div>
+                    <div className="fraunces text-ink" style={{ fontSize: '1.8rem', fontWeight: 900 }}>₹{pendingAmount.toFixed(2)}</div>
                     <div className="label" style={{ fontSize: '10px', marginTop: '12px', color: '#2d5a27' }}>Available for withdrawal</div>
                 </div>
                 <div className="paper-sheet" style={{ padding: '24px' }}>
                     <div className="label" style={{ fontSize: '9px', opacity: 0.5, marginBottom: '8px' }}>TOTAL SALES (MONTH)</div>
-                    <div className="fraunces text-ink" style={{ fontSize: '1.8rem', fontWeight: 900 }}>₹12,400.75</div>
-                    <div className="label" style={{ fontSize: '10px', marginTop: '12px', opacity: 0.5 }}>After commission (15%)</div>
+                    <div className="fraunces text-ink" style={{ fontSize: '1.8rem', fontWeight: 900 }}>₹{monthSales.toFixed(2)}</div>
+                    <div className="label" style={{ fontSize: '10px', marginTop: '12px', opacity: 0.5 }}>From payout records this month</div>
                 </div>
                 <div className="paper-sheet" style={{ padding: '24px', background: 'var(--ink-primary)', color: 'white' }}>
                     <div className="label" style={{ fontSize: '9px', opacity: 0.6, marginBottom: '8px', color: 'white' }}>NET LIFETIME EARNINGS</div>
-                    <div className="fraunces" style={{ fontSize: '1.8rem', fontWeight: 900 }}>₹48,210.00</div>
+                    <div className="fraunces" style={{ fontSize: '1.8rem', fontWeight: 900 }}>₹{lifetimeEarnings.toFixed(2)}</div>
                     <button className="btn-signup w-full mt-4" style={{ fontSize: '10px', borderColor: 'rgba(255,255,255,0.2)' }}>Payout History Report</button>
                 </div>
             </div>
@@ -45,19 +76,25 @@ export default function EarningsPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {payouts.map((row, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
-                                <td className="nav-text" style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700 }}>{row.id}</td>
-                                <td className="lora" style={{ padding: '16px 24px', fontSize: '13px' }}>{row.date}</td>
-                                <td className="fraunces" style={{ padding: '16px 24px', fontSize: '14px', fontWeight: 700 }}>{row.amount}</td>
-                                <td className="label" style={{ padding: '16px 24px', fontSize: '10px', opacity: 0.6 }}>{row.method}</td>
-                                <td style={{ padding: '16px 24px' }}>
-                                    <span style={{ fontSize: '9px', fontWeight: 900, padding: '4px 8px', borderRadius: '4px', background: 'rgba(45,90,39,0.1)', color: '#2d5a27' }}>
-                                        {row.status}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
+                        {loading ? (
+                            <tr><td style={{ padding: '16px 24px' }} colSpan={5}>Loading payouts...</td></tr>
+                        ) : payouts.length === 0 ? (
+                            <tr><td style={{ padding: '16px 24px' }} colSpan={5}>No payout records yet.</td></tr>
+                        ) : (
+                            payouts.map((row) => (
+                                <tr key={row.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
+                                    <td className="nav-text" style={{ padding: '16px 24px', fontSize: '12px', fontWeight: 700 }}>#{row.id.slice(0, 8)}</td>
+                                    <td className="lora" style={{ padding: '16px 24px', fontSize: '13px' }}>{new Date(row.createdAt).toLocaleDateString()}</td>
+                                    <td className="fraunces" style={{ padding: '16px 24px', fontSize: '14px', fontWeight: 700 }}>₹{row.amount.toFixed(2)}</td>
+                                    <td className="label" style={{ padding: '16px 24px', fontSize: '10px', opacity: 0.6 }}>{row.status === 'PAID' ? 'Transfer Complete' : 'Awaiting Transfer'}</td>
+                                    <td style={{ padding: '16px 24px' }}>
+                                        <span style={{ fontSize: '9px', fontWeight: 900, padding: '4px 8px', borderRadius: '4px', background: row.status === 'PAID' ? 'rgba(45,90,39,0.1)' : 'rgba(139,30,43,0.1)', color: row.status === 'PAID' ? '#2d5a27' : '#8b1e2b' }}>
+                                            {row.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </section>

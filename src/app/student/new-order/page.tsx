@@ -1,11 +1,67 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
+type RazorpayCreateResponse = {
+    razorpayOrderId: string;
+    keyId: string;
+    amount: number;
+    currency: string;
+};
+
+declare global {
+    interface Window {
+        Razorpay?: new (options: {
+            key: string;
+            amount: number;
+            currency: string;
+            name: string;
+            description: string;
+            order_id: string;
+            handler: (response: {
+                razorpay_order_id: string;
+                razorpay_payment_id: string;
+                razorpay_signature: string;
+            }) => void;
+            prefill?: {
+                name?: string;
+                email?: string;
+            };
+            theme?: { color?: string };
+            modal?: { ondismiss?: () => void };
+        }) => { open: () => void };
+    }
+}
+
+const loadRazorpayScript = async () => {
+    if (typeof window === 'undefined') return false;
+    if (window.Razorpay) return true;
+
+    return new Promise<boolean>((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+};
+
 export default function NewOrderPage() {
+    const router = useRouter();
+    const { data: session } = useSession();
     const [step, setStep] = useState<Step>(1);
+    const [vendors, setVendors] = useState<{ id: string; shopName: string }[]>([]);
+    const [selectedVendorId, setSelectedVendorId] = useState<string>('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string>('');
+    const [createdOrderId, setCreatedOrderId] = useState<string>('');
+    const [paymentOrderId, setPaymentOrderId] = useState<string>('');
     const [order, setOrder] = useState({
         file: null as File | null,
         paperSize: 'A4',
@@ -19,6 +75,25 @@ export default function NewOrderPage() {
         binding: 'No Binding',
         instructions: '',
     });
+
+    useEffect(() => {
+        const loadVendors = async () => {
+            const res = await fetch('/api/student/vendors');
+            if (res.ok) {
+                const data = await res.json();
+                const vendorRows = (data.vendors || []).map((v: { id: string; shopName: string }) => ({ id: v.id, shopName: v.shopName }));
+                setVendors(vendorRows);
+                if (vendorRows.length > 0) {
+                    setSelectedVendorId(vendorRows[0].id);
+                }
+            }
+        };
+        loadVendors();
+    }, []);
+
+    const estimatedBasePrice = useMemo(() => {
+        return Math.max(order.copies * 10, 10);
+    }, [order.copies]);
 
     const steps = [
         { title: 'Upload', sub: 'Document' },
@@ -47,6 +122,154 @@ export default function NewOrderPage() {
 
     const nextStep = () => setStep((prev) => Math.min(prev + 1, 6) as Step);
     const prevStep = () => setStep((prev) => Math.max(prev - 1, 1) as Step);
+
+    const submitOrder = async () => {
+        setError('');
+        if (!selectedVendorId) {
+            setError('Please select a vendor.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            let uploadedFileMeta:
+                | {
+                    fileUrl: string;
+                    fileName: string;
+                    fileSize: number;
+                }
+                | undefined;
+
+            if (order.file) {
+                const createUploadRes = await fetch('/api/upload/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileName: order.file.name,
+                        fileSize: order.file.size,
+                        mimeType: order.file.type || 'application/octet-stream',
+                    }),
+                });
+
+                if (!createUploadRes.ok) {
+                    setError('Failed to initialize file upload.');
+                    return;
+                }
+
+                const uploadInfo = await createUploadRes.json() as {
+                    bucket: string;
+                    path: string;
+                    token: string;
+                    storedFileUrl: string;
+                };
+
+                const supabase = getSupabaseBrowserClient();
+                if (!supabase) {
+                    setError('Supabase browser client not configured.');
+                    return;
+                }
+
+                const uploadRes = await supabase.storage
+                    .from(uploadInfo.bucket)
+                    .uploadToSignedUrl(uploadInfo.path, uploadInfo.token, order.file);
+
+                if (uploadRes.error) {
+                    setError('File upload failed. Please retry.');
+                    return;
+                }
+
+                uploadedFileMeta = {
+                    fileUrl: uploadInfo.storedFileUrl,
+                    fileName: order.file.name,
+                    fileSize: order.file.size,
+                };
+            }
+
+            const createRes = await fetch('/api/order/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    vendorId: selectedVendorId,
+                    baseAmount: estimatedBasePrice,
+                    files: uploadedFileMeta ? [uploadedFileMeta] : undefined,
+                }),
+            });
+
+            if (!createRes.ok) {
+                setError('Failed to create order.');
+                return;
+            }
+
+            const createData = await createRes.json();
+            const orderId = createData.order?.id as string;
+            setCreatedOrderId(orderId);
+
+            const paymentRes = await fetch('/api/payment/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderId }),
+            });
+
+            if (!paymentRes.ok) {
+                setError('Failed to create payment order.');
+                return;
+            }
+
+            const paymentData = (await paymentRes.json()) as RazorpayCreateResponse;
+            setPaymentOrderId(paymentData.razorpayOrderId || '');
+
+            const razorpayLoaded = await loadRazorpayScript();
+            if (!razorpayLoaded || !window.Razorpay) {
+                setError('Razorpay checkout failed to load.');
+                return;
+            }
+
+            const razorpay = new window.Razorpay({
+                key: paymentData.keyId,
+                amount: paymentData.amount,
+                currency: paymentData.currency,
+                name: 'AforPrint',
+                description: 'Campus print order payment',
+                order_id: paymentData.razorpayOrderId,
+                prefill: {
+                    name: session?.user?.name ?? undefined,
+                    email: session?.user?.email ?? undefined,
+                },
+                theme: {
+                    color: '#8b1e2b',
+                },
+                handler: async (response) => {
+                    const verifyRes = await fetch('/api/payment/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            orderId,
+                            razorpayOrderId: response.razorpay_order_id,
+                            razorpayPaymentId: response.razorpay_payment_id,
+                            razorpaySignature: response.razorpay_signature,
+                        }),
+                    });
+
+                    if (!verifyRes.ok) {
+                        setError('Payment verification failed. Please contact support.');
+                        return;
+                    }
+
+                    router.push('/student/orders');
+                },
+                modal: {
+                    ondismiss: () => {
+                        setError('Payment was cancelled. You can retry from your orders page.');
+                    },
+                },
+            });
+
+            razorpay.open();
+
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         <div className="dash-container">
@@ -208,6 +431,21 @@ export default function NewOrderPage() {
                             <div className="reveal-up active">
                                 <h3 className="fraunces text-ink mb-6" style={{ fontSize: '1.25rem' }}>Final Review</h3>
                                 <p className="lora italic opacity-60 text-13px">"Please confirm all parameters before proceeding to shop comparison."</p>
+                                <div style={{ marginTop: '20px', display: 'grid', gap: '12px' }}>
+                                    <div>
+                                        <label className="ink-label">Choose Vendor</label>
+                                        <select
+                                            className="ink-input"
+                                            value={selectedVendorId}
+                                            onChange={(e) => setSelectedVendorId(e.target.value)}
+                                        >
+                                            {vendors.map((vendor) => (
+                                                <option key={vendor.id} value={vendor.id}>{vendor.shopName}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    {error && <div className="label" style={{ color: 'var(--wax-red)', fontSize: '10px' }}>{error}</div>}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -229,7 +467,9 @@ export default function NewOrderPage() {
                         {step < 6 ? (
                             <button onClick={nextStep} className="btn-signup">Next Step</button>
                         ) : (
-                            <Link href="/student/orders" className="btn-signup">Compare Shops</Link>
+                            <button onClick={submitOrder} className="btn-signup" disabled={isSubmitting || vendors.length === 0}>
+                                {isSubmitting ? 'Creating...' : 'Create Order'}
+                            </button>
                         )}
                     </div>
                 </div>
@@ -247,11 +487,16 @@ export default function NewOrderPage() {
 
                         <div className="flex justify-between" style={{ fontSize: '14px', fontWeight: 900 }}>
                             <span className="fraunces">Est. Base Price</span>
-                            <span className="text-ink">₹{step > 5 ? '81.00' : '---'}</span>
+                            <span className="text-ink">₹{step > 5 ? estimatedBasePrice.toFixed(2) : '---'}</span>
                         </div>
                         <p className="label" style={{ fontSize: '8px', opacity: 0.4, fontStyle: 'italic' }}>
                             *Vendors may have additional fees based on campus location.
                         </p>
+                        {createdOrderId && (
+                            <p className="label" style={{ fontSize: '8px', opacity: 0.6 }}>
+                                Order #{createdOrderId.slice(0, 8)} created {paymentOrderId ? `• Razorpay ${paymentOrderId}` : ''}
+                            </p>
+                        )}
                     </div>
                 </aside>
             </div>

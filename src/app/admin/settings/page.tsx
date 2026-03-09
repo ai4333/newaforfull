@@ -1,48 +1,119 @@
-import React from 'react';
-import { Card } from '@/components/Card';
-import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
-import Link from 'next/link';
+import React from "react";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { Save, Bell, Lock, Globe, Database } from "lucide-react";
+export const dynamic = 'force-dynamic';
 
-export default function AdminSettings() {
+
+export default async function AdminSettingsPage() {
+    const session = await auth();
+    const role = (session?.user as { role?: string } | undefined)?.role;
+
+    if (!session?.user || role !== "ADMIN") {
+        redirect('/admin/login?next=/admin/settings');
+    }
+
     return (
-        <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-            <header style={{ marginBottom: '3rem' }}>
-                <Link href="/admin/dashboard" style={{ color: 'hsl(var(--primary))', textDecoration: 'none', marginBottom: '1rem', display: 'block' }}>← Back to Dashboard</Link>
-                <h1 style={{ fontSize: '2.5rem' }}>Global Economcis</h1>
-                <p style={{ color: 'hsl(var(--muted-foreground))' }}>Control commissions, fees, and batching thresholds across the platform.</p>
+        <div className="reveal-up active">
+            <header style={{ marginBottom: '2.5rem' }}>
+                <h2 className="fraunces text-ink" style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '0.5rem' }}>Platform Covenant</h2>
+                <p className="lora italic opacity-60">"Adjusting the fundamental parameters of the AforPrint ecosystem."</p>
             </header>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <Card>
-                    <h3 style={{ marginBottom: '1.5rem' }}>Commission & Fees</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                        <Input label="Vendor Commission (%)" defaultValue="10" type="number" />
-                        <Input label="Platform Fee (Student)" defaultValue="5.00" type="number" />
-                    </div>
-                </Card>
-
-                <Card>
-                    <h3 style={{ marginBottom: '1.5rem' }}>Delivery Model</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                        <Input label="Base Batch Payout" defaultValue="40.00" type="number" />
-                        <Input label="Per Order Bonus" defaultValue="5.00" type="number" />
-                        <Input label="Scheduling Threshold (₹)" defaultValue="250" type="number" />
-                        <Input label="Scheduling Threshold (Qty)" defaultValue="5" type="number" />
-                    </div>
-                </Card>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                    <Button variant="primary" style={{ width: '200px' }}>Save Global Settings</Button>
-                </div>
-
-                <section style={{ marginTop: '2rem', padding: '1.5rem', background: 'hsl(var(--destructive) / 0.05)', borderRadius: 'var(--radius)', border: '1px solid hsl(var(--destructive) / 0.1)' }}>
-                    <h4 style={{ color: 'hsl(var(--destructive))', marginBottom: '0.5rem' }}>Danger Zone</h4>
-                    <p style={{ fontSize: '0.875rem', color: 'hsl(var(--muted-foreground))', marginBottom: '1.5rem' }}>
-                        These settings affect all active campuses immediately. Use with caution.
-                    </p>
-                    <Button variant="secondary" style={{ color: 'hsl(var(--destructive))' }}>Reset All to System Default</Button>
+            <div className="admin-grid-4" style={{ marginBottom: '2.5rem' }}>
+                <section className="paper-sheet" style={{ padding: '1.2rem' }}>
+                    <div className="label" style={{ fontSize: '8px', marginBottom: '8px' }}>Security Level</div>
+                    <div style={{ fontSize: '10px', fontWeight: 900, color: 'var(--wax-red)' }}>MAXIMUM</div>
                 </section>
+                <section className="paper-sheet" style={{ padding: '1.2rem' }}>
+                    <div className="label" style={{ fontSize: '8px', marginBottom: '8px' }}>Global Commission</div>
+                    <div className="fraunces text-ink" style={{ fontSize: '1.2rem', fontWeight: 800 }}>11% per Side</div>
+                </section>
+                <section className="paper-sheet" style={{ padding: '1.2rem' }}>
+                    <div className="label" style={{ fontSize: '8px', marginBottom: '8px' }}>API Version</div>
+                    <div className="fraunces text-ink" style={{ fontSize: '1.2rem', fontWeight: 800 }}>v2.4 LTS</div>
+                </section>
+                <section className="paper-sheet" style={{ padding: '1.2rem' }}>
+                    <div className="label" style={{ fontSize: '8px', marginBottom: '8px' }}>CDN Latency</div>
+                    <div style={{ fontSize: '10px', fontWeight: 900, color: '#10b981' }}>12ms (Optimal)</div>
+                </section>
+            </div>
+
+            <div className="admin-main-grid">
+                <section className="paper-sheet">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '25px' }}>
+                        <Globe size={18} className="text-ink" />
+                        <h3 className="fraunces text-ink" style={{ fontSize: '1.2rem' }}>Universal Parameters</h3>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div>
+                            <label className="label" style={{ fontSize: '9px', marginBottom: '8px', display: 'block' }}>Platform Name</label>
+                            <input className="ink-input" defaultValue="AforPrint: Campus Logistics" style={{ width: '100%', fontSize: '12px' }} />
+                        </div>
+                        <div>
+                            <label className="label" style={{ fontSize: '9px', marginBottom: '8px', display: 'block' }}>Support Email</label>
+                            <input className="ink-input" defaultValue="parchment@aforprint.io" style={{ width: '100%', fontSize: '12px' }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '20px' }}>
+                            <div style={{ flex: 1 }}>
+                                <label className="label" style={{ fontSize: '9px', marginBottom: '8px', display: 'block' }}>Max File Size (MB)</label>
+                                <input className="ink-input" defaultValue="50" type="number" style={{ width: '100%', fontSize: '12px' }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <label className="label" style={{ fontSize: '9px', marginBottom: '8px', display: 'block' }}>Default Currency</label>
+                                <select className="ink-input" style={{ width: '100%', fontSize: '12px' }}>
+                                    <option>INR (₹)</option>
+                                    <option>USD ($)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button className="btn-signup" style={{ marginTop: '30px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                        <Save size={14} /> Seal Changes
+                    </button>
+                </section>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <section className="paper-sheet">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                            <Bell size={16} className="text-ink" />
+                            <h3 className="fraunces text-ink" style={{ fontSize: '1rem' }}>Notification Relay</h3>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '11px' }}>Order Confirmation Emails</span>
+                                <input type="checkbox" defaultChecked />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '11px' }}>Vendor Payout Alerts</span>
+                                <input type="checkbox" defaultChecked />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '11px' }}>Platform Maintenance SMS</span>
+                                <input type="checkbox" />
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="paper-sheet" style={{ borderLeft: '3px solid var(--wax-red)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                            <Lock size={16} style={{ color: 'var(--wax-red)' }} />
+                            <h3 className="fraunces" style={{ fontSize: '1rem', color: 'var(--wax-red)' }}>Access Control</h3>
+                        </div>
+                        <p style={{ fontSize: '10px', opacity: 0.6, marginBottom: '15px' }}>Restrict administrative access to specific IP ranges or domains.</p>
+                        <button className="btn-signin" style={{ width: '100%', fontSize: '10px' }}>Manage Whitelist</button>
+                    </section>
+
+                    <div className="paper-sheet" style={{ background: 'var(--ink-primary)', color: 'white', padding: '15px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                            <Database size={14} />
+                            <div className="label" style={{ fontSize: '8px', color: 'white' }}>System Health</div>
+                        </div>
+                        <div style={{ fontSize: '10px' }}>All scripts operating within nominal parameters. Archives are synchronized.</div>
+                    </div>
+                </div>
             </div>
         </div>
     );

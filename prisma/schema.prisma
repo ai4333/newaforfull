@@ -1,0 +1,177 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  VENDOR
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PENDING
+  PAID
+  ACCEPTED
+  READY
+  COMPLETED
+  REJECTED
+  DISPUTED
+  CANCELLED
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  phone         String?
+  givenName     String?
+  familyName    String?
+  locale        String?
+  isSuspended   Boolean   @default(false)
+  suspendedAt   DateTime?
+  role          Role      @default(STUDENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  orders        Order[]       @relation("StudentOrders")
+  vendorProfile VendorProfile?
+  logs          ActivityLog[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model VendorProfile {
+  id               String @id @default(uuid())
+  userId           String @unique
+  shopName         String
+  ownerName        String?
+  contactNumber    String?
+  shopAddress      String?
+  businessHours    Json?
+  pricingConfig    Json?
+  inventoryItems   Json?
+  acceptingOrders  Boolean @default(true)
+  expressDelivery  Boolean @default(true)
+  deliveryRadiusKm Float   @default(2.5)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id])
+  orders  Order[]
+  payouts Payout[]
+}
+
+model Order {
+  id        String @id @default(uuid())
+  studentId String
+  vendorId  String
+
+  // Financial Breakdown
+  baseAmount      Float // Vendor Price
+  studentFee      Float // baseAmount * 0.11
+  vendorFee       Float // baseAmount * 0.11
+  totalPaid       Float // baseAmount + studentFee
+  vendorEarning   Float // baseAmount - vendorFee
+  platformRevenue Float // studentFee + vendorFee
+
+  // Razorpay Data
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  status            OrderStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  student User          @relation("StudentOrders", fields: [studentId], references: [id])
+  vendor  VendorProfile @relation(fields: [vendorId], references: [id])
+  files   OrderFile[]
+
+  // Print Specifications
+  pages           Int?
+  copies          Int?
+  printType       String? @default("BW")
+  paperType       String? @default("STANDARD")
+  deliveryAddress String?
+}
+
+model OrderFile {
+  id        String   @id @default(uuid())
+  orderId   String
+  fileUrl   String
+  fileName  String
+  fileSize  Int
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+model Payout {
+  id        String       @id @default(uuid())
+  vendorId  String
+  amount    Float
+  status    PayoutStatus @default(PENDING)
+  paidAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  vendor VendorProfile @relation(fields: [vendorId], references: [id])
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  ip        String?
+  details   String? // Store additional info like Razorpay errors
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}

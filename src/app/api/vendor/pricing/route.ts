@@ -1,0 +1,109 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+
+const paperSchema = z.object({
+  size: z.string().min(1),
+  bw: z.number().nonnegative(),
+  color: z.number().nonnegative(),
+});
+
+const gsmSchema = z.object({
+  gsm: z.string().min(1),
+  add: z.number(),
+});
+
+const finishingSchema = z.object({
+  item: z.string().min(1),
+  price: z.number().nonnegative(),
+  enabled: z.boolean(),
+});
+
+const requestSchema = z.object({
+  paperPrices: z.array(paperSchema).min(1),
+  gsmPrices: z.array(gsmSchema).min(1),
+  finishingPrices: z.array(finishingSchema).min(1),
+});
+
+const readLimiter = createRateLimiter(60, "1 m");
+const writeLimiter = createRateLimiter(30, "1 m");
+
+async function ensureVendor() {
+  const session = await auth();
+  const userId = session?.user?.id;
+  const role = (session?.user as { role?: string } | undefined)?.role;
+
+  if (!userId || role !== "VENDOR") {
+    return null;
+  }
+
+  const profile = await prisma.vendorProfile.findUnique({
+    where: { userId },
+    select: { id: true, userId: true },
+  });
+  if (!profile) {
+    return null;
+  }
+
+  return { userId, profile };
+}
+
+export async function GET() {
+  const vendor = await ensureVendor();
+  if (!vendor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (readLimiter) {
+    const { success } = await readLimiter.limit(`vendor-pricing-read:${vendor.userId}`);
+    if (!success) return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+  } else if (!shouldBypassRateLimit()) {
+    return NextResponse.json({ error: "Rate limiting unavailable" }, { status: 500 });
+  }
+
+  const rows = await prisma.$queryRaw<Array<{ pricingConfig: unknown }>>`
+    SELECT "pricingConfig"
+    FROM "VendorProfile"
+    WHERE "id" = ${vendor.profile.id}
+    LIMIT 1
+  `;
+
+  const pricing = rows[0]?.pricingConfig ?? null;
+
+  return NextResponse.json({ pricing });
+}
+
+export async function PATCH(req: Request) {
+  const vendor = await ensureVendor();
+  if (!vendor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (writeLimiter) {
+    const { success } = await writeLimiter.limit(`vendor-pricing-write:${vendor.userId}`);
+    if (!success) return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+  } else if (!shouldBypassRateLimit()) {
+    return NextResponse.json({ error: "Rate limiting unavailable" }, { status: 500 });
+  }
+
+  const body = await req.json();
+  const parsed = requestSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      UPDATE "VendorProfile"
+      SET "pricingConfig" = ${JSON.stringify(parsed.data)}::jsonb
+      WHERE "id" = ${vendor.profile.id}
+    `;
+
+    await tx.activityLog.create({
+      data: {
+        userId: vendor.userId,
+        action: "VENDOR_PRICING_UPDATED",
+        details: `Vendor pricing updated for ${vendor.profile.id}`,
+      },
+    });
+
+  });
+
+  return NextResponse.json({ pricing: parsed.data });
+}

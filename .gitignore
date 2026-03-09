@@ -50,3 +50,5 @@ tmp/
 *.webp
 *.png
 *.jpg
+
+/src/generated/prisma

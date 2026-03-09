@@ -1,14 +1,34 @@
 "use client";
 import React, { useEffect } from 'react';
 import Link from 'next/link';
+import { signIn, useSession } from "next-auth/react";
+import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
     const [step, setStep] = React.useState<'role' | 'vendor-login' | 'student-login'>('role');
+    const { data: session, status } = useSession();
+    const router = useRouter();
 
-    const handleLogin = (role: 'student' | 'vendor') => {
-        localStorage.setItem('userRole', role);
-        localStorage.setItem('isLoggedIn', 'true');
-        window.location.href = role === 'student' ? '/student/dashboard' : '/vendor/dashboard';
+    useEffect(() => {
+        if (status !== 'authenticated') {
+            return;
+        }
+
+        const role = (session?.user as { role?: string } | undefined)?.role;
+        if (role === 'VENDOR') {
+            router.replace('/vendor/dashboard');
+            return;
+        }
+        if (role === 'ADMIN') {
+            router.replace('/admin/dashboard');
+            return;
+        }
+        router.replace('/student/dashboard');
+    }, [status, session, router]);
+
+    const handleGoogleLogin = async (role: 'student' | 'vendor') => {
+        const callbackUrl = `/auth/role-sync?role=${role}`;
+        await signIn("google", { callbackUrl });
     };
 
     useEffect(() => {
@@ -69,6 +89,9 @@ export default function LoginPage() {
                             <button onClick={() => setStep('vendor-login')} className="btn-signin" style={{ justifyContent: 'center', padding: '16px', fontSize: '14px', cursor: 'pointer' }}>
                                 Enter as Vendor
                             </button>
+                            <Link href="/admin/login" className="btn-signin" style={{ justifyContent: 'center', padding: '16px', fontSize: '14px', textDecoration: 'none' }}>
+                                Admin Console
+                            </Link>
                         </div>
                     </>
                 ) : step === 'student-login' ? (
@@ -81,7 +104,7 @@ export default function LoginPage() {
                         </div>
 
                         <div style={{ position: 'relative', zIndex: 10 }}>
-                            <button onClick={() => handleLogin('student')} className="btn-signup" style={{
+                            <button onClick={() => handleGoogleLogin('student')} className="btn-signup" style={{
                                 width: '100%',
                                 justifyContent: 'center',
                                 padding: '16px',
@@ -111,7 +134,7 @@ export default function LoginPage() {
                         </div>
 
                         <div style={{ position: 'relative', zIndex: 10 }}>
-                            <button onClick={() => handleLogin('vendor')} className="btn-signup" style={{
+                            <button onClick={() => handleGoogleLogin('vendor')} className="btn-signup" style={{
                                 width: '100%',
                                 justifyContent: 'center',
                                 padding: '16px',
