@@ -44,7 +44,7 @@ function AdminLoginInner() {
 
         {blocked ? (
           <div className="paper-sheet" style={{ padding: "14px", border: "1px solid rgba(139,30,43,0.2)", color: "var(--wax-red)", fontSize: "12px", marginBottom: "16px" }}>
-            This account is authenticated but does not have admin access.
+            Access denied. You are not an admin.
           </div>
         ) : null}
 

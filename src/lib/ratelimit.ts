@@ -24,5 +24,5 @@ export function createRateLimiter(limit: number, window: string) {
 }
 
 export function shouldBypassRateLimit() {
-  return !hasUpstashEnv && process.env.NODE_ENV !== "production";
+  return !hasUpstashEnv || process.env.NODE_ENV !== "production";
 }

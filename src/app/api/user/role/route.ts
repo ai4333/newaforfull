@@ -59,10 +59,23 @@ export async function POST(req: Request) {
       const existing = await tx.vendorProfile.findUnique({ where: { userId }, select: { id: true } });
       if (!existing) {
         await tx.vendorProfile.create({
-          data: { userId, shopName },
+          data: { userId, shopName, approvalStatus: "PENDING_APPROVAL" },
           select: { id: true },
         });
       }
+    }
+
+    if (nextRole === "STUDENT") {
+      await tx.studentProfile.upsert({
+        where: { userId },
+        update: {
+          name: user.name ?? undefined,
+        },
+        create: {
+          userId,
+          name: user.name ?? undefined,
+        },
+      });
     }
 
     await tx.activityLog.create({

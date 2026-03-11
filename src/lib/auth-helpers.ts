@@ -1,7 +1,19 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Role, User } from "@prisma/client";
 import { NextResponse } from "next/server";
+
+function getAdminEmails() {
+    return (process.env.ADMIN_EMAILS || "")
+        .split(",")
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean);
+}
+
+function isAllowlistedAdmin(email?: string | null) {
+    if (!email) return false;
+    return getAdminEmails().includes(email.toLowerCase());
+}
 
 /**
  * Reusable helper to enforce session and role requirements in API routes.
@@ -22,11 +34,42 @@ export async function getAuthorizedUser(expectedRole?: Role) {
         return { error: "Unauthorized: User not found in database", status: 403 };
     }
 
+    if (user.isSuspended) {
+        return { error: "Account suspended", status: 403 };
+    }
+
     if (expectedRole && user.role !== expectedRole && user.role !== Role.ADMIN) {
         return { error: `Forbidden: Requires ${expectedRole} role`, status: 403 };
     }
 
     return { user, session };
+}
+
+export async function requireActiveUser(expectedRole?: Role): Promise<{ user: User } | { response: NextResponse }> {
+    const result = await getAuthorizedUser(expectedRole);
+    if ("error" in result) {
+        return { response: sendError(result.error || "Unauthorized", result.status) };
+    }
+
+    return { user: result.user };
+}
+
+export async function requireAdminApiUser(): Promise<{ user: User } | { response: NextResponse }> {
+    const session = await auth();
+    const sessionUserId = session?.user?.id;
+    const sessionRole = (session?.user as { role?: string } | undefined)?.role;
+
+    if (!sessionUserId || sessionRole !== "ADMIN") {
+        return { response: sendError("Forbidden", 403) };
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: sessionUserId } });
+
+    if (!user || user.isSuspended || user.role !== "ADMIN" || !isAllowlistedAdmin(user.email)) {
+        return { response: sendError("Forbidden", 403) };
+    }
+
+    return { user };
 }
 
 /**

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
 import { buildStoragePath, getSupabaseServerClient, storageBucket } from "@/lib/supabase-server";
+import { requireActiveUser } from "@/lib/auth-helpers";
 
 const requestSchema = z.object({
   fileName: z.string().min(1).max(150),
@@ -21,13 +21,11 @@ const allowedMimeTypes = new Set([
 ]);
 
 export async function POST(req: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "STUDENT") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireActiveUser("STUDENT");
+  if ("response" in authResult) {
+    return authResult.response;
   }
+  const userId = authResult.user.id;
 
   if (writeLimiter) {
     const { success } = await writeLimiter.limit(`upload-create:${userId}`);

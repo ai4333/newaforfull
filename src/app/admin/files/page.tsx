@@ -11,8 +11,12 @@ export default async function AdminFilesPage() {
     const session = await auth();
     const role = (session?.user as { role?: string } | undefined)?.role;
 
-    if (!session?.user || role !== "ADMIN") {
+    if (!session?.user) {
         redirect('/admin/login?next=/admin/files');
+    }
+
+    if (role !== "ADMIN") {
+        redirect('/');
     }
 
     const files = await prisma.orderFile.findMany({

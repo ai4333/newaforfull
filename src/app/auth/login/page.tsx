@@ -89,9 +89,6 @@ export default function LoginPage() {
                             <button onClick={() => setStep('vendor-login')} className="btn-signin" style={{ justifyContent: 'center', padding: '16px', fontSize: '14px', cursor: 'pointer' }}>
                                 Enter as Vendor
                             </button>
-                            <Link href="/admin/login" className="btn-signin" style={{ justifyContent: 'center', padding: '16px', fontSize: '14px', textDecoration: 'none' }}>
-                                Admin Console
-                            </Link>
                         </div>
                     </>
                 ) : step === 'student-login' ? (

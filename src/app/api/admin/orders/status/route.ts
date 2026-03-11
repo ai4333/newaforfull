@@ -1,38 +1,37 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { OrderStatus } from "@prisma/client";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+import { requireAdminApiUser } from "@/lib/auth-helpers";
 
 const requestSchema = z.object({
   orderId: z.string().uuid(),
-  status: z.enum(["DISPUTED", "CANCELLED", "COMPLETED", "ACCEPTED"]),
+  status: z.enum(["PAYMENT_PENDING", "PAID", "ACCEPTED", "PRINTING", "READY", "COMPLETED", "REJECTED"]),
   note: z.string().min(3).max(300).optional(),
 });
 
 const writeLimiter = createRateLimiter(40, "1 m");
 
 const allowedAdminTransitions: Record<OrderStatus, OrderStatus[]> = {
-  PENDING: ["CANCELLED"],
-  PAYMENT_PENDING: ["CANCELLED"],
-  PAID: ["DISPUTED", "CANCELLED"],
-  ACCEPTED: ["DISPUTED", "CANCELLED"],
-  READY: ["DISPUTED", "CANCELLED"],
-  COMPLETED: ["DISPUTED"],
-  REJECTED: ["DISPUTED"],
-  DISPUTED: ["ACCEPTED", "COMPLETED", "CANCELLED"],
-  CANCELLED: [],
+  PENDING: ["PAYMENT_PENDING", "REJECTED"],
+  PAYMENT_PENDING: ["PAID", "REJECTED"],
+  PAID: ["ACCEPTED", "REJECTED"],
+  ACCEPTED: ["PRINTING", "REJECTED"],
+  PRINTING: ["READY", "REJECTED"],
+  READY: ["COMPLETED", "REJECTED"],
+  COMPLETED: [],
+  REJECTED: [],
+  DISPUTED: ["ACCEPTED", "PRINTING", "READY", "COMPLETED", "REJECTED"],
+  CANCELLED: ["PAYMENT_PENDING", "REJECTED"],
 };
 
 export async function PATCH(req: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireAdminApiUser();
+  if ("response" in authResult) {
+    return authResult.response;
   }
+  const userId = authResult.user.id;
 
   if (writeLimiter) {
     const { success } = await writeLimiter.limit(`admin-order-status:${userId}`);

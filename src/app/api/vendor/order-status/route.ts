@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { OrderStatus } from "@prisma/client";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+import { requireActiveUser } from "@/lib/auth-helpers";
 
 const requestSchema = z.object({
   orderId: z.string().uuid(),
-  status: z.enum(["ACCEPTED", "READY", "COMPLETED", "REJECTED"]),
+  status: z.enum(["ACCEPTED", "PRINTING", "READY", "COMPLETED", "REJECTED"]),
 });
 
 const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
   PENDING: [],
   PAYMENT_PENDING: [],
   PAID: ["ACCEPTED", "REJECTED"],
-  ACCEPTED: ["READY", "REJECTED"],
+  ACCEPTED: ["PRINTING", "REJECTED"],
+  PRINTING: ["READY", "REJECTED"],
   READY: ["COMPLETED"],
   COMPLETED: [],
   REJECTED: [],
@@ -25,13 +26,11 @@ const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
 const writeLimiter = createRateLimiter(40, "1 m");
 
 export async function PATCH(req: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "VENDOR") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireActiveUser("VENDOR");
+  if ("response" in authResult) {
+    return authResult.response;
   }
+  const userId = authResult.user.id;
 
   if (writeLimiter) {
     const { success } = await writeLimiter.limit(`vendor-order-status:${userId}`);
@@ -42,18 +41,17 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Rate limiting unavailable" }, { status: 500 });
   }
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const vendorProfile = await prisma.vendorProfile.findUnique({
     where: { userId },
-    select: { id: true },
+    select: { id: true, approvalStatus: true },
   });
 
   if (!vendorProfile) {
     return NextResponse.json({ error: "Vendor profile not found" }, { status: 404 });
+  }
+
+  if (vendorProfile.approvalStatus !== "APPROVED") {
+    return NextResponse.json({ error: "Vendor account pending admin approval" }, { status: 403 });
   }
 
   const body = await req.json();

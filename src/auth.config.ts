@@ -36,6 +36,8 @@ export const authConfig = {
 
             if (isAdminAllowlisted(typeof token.email === "string" ? token.email : null)) {
                 token.role = "ADMIN";
+            } else if (token.role === "ADMIN") {
+                token.role = "STUDENT";
             } else if (!token.role) {
                 token.role = "STUDENT";
             }

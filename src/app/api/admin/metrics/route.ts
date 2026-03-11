@@ -1,19 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { requireAdminApiUser } from "@/lib/auth-helpers";
 
 export async function GET() {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireAdminApiUser();
+  if ("response" in authResult) {
+    return authResult.response;
   }
 
   const [orderAgg, payoutAgg, userCounts] = await Promise.all([

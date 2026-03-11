@@ -9,8 +9,12 @@ export default async function AdminSettingsPage() {
     const session = await auth();
     const role = (session?.user as { role?: string } | undefined)?.role;
 
-    if (!session?.user || role !== "ADMIN") {
+    if (!session?.user) {
         redirect('/admin/login?next=/admin/settings');
+    }
+
+    if (role !== "ADMIN") {
+        redirect('/');
     }
 
     return (

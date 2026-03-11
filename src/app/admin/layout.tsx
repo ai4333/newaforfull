@@ -1,128 +1,68 @@
 "use client";
-import React from "react";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-    LayoutDashboard,
-    Users,
-    ShoppingBag,
-    Store,
-    Truck,
-    CreditCard,
-    HardDrive,
-    LifeBuoy,
-    History,
-    Settings,
-    ChevronRight
-} from "lucide-react";
 
-const NAV_ITEMS = [
-    { label: "Overview", href: "/admin/dashboard", icon: LayoutDashboard },
-    { label: "User Registry", href: "/admin/users", icon: Users },
-    { label: "Order Oversight", href: "/admin/orders", icon: ShoppingBag },
-    { label: "Shop Management", href: "/admin/shops", icon: Store },
-    { label: "Delivery Tracking", href: "/admin/delivery", icon: Truck },
-    { label: "Financials", href: "/admin/payouts", icon: CreditCard },
-    { label: "File Storage", href: "/admin/files", icon: HardDrive },
-    { label: "Support Tickets", href: "/admin/support", icon: LifeBuoy },
-    { label: "Activity Logs", href: "/admin/logs", icon: History },
-    { label: "System Settings", href: "/admin/settings", icon: Settings },
+const navItems = [
+  { href: "/admin/dashboard", label: "Dashboard" },
+  { href: "/admin/shops", label: "Vendors" },
+  { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/payouts", label: "Payouts" },
+  { href: "/admin/files", label: "Files" },
+  { href: "/admin/logs", label: "Logs" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-    const pathname = usePathname();
+  const pathname = usePathname();
 
-    return (
-        <div className="dash-layout parchment" style={{
-            height: '92vh',
-            margin: '0 auto',
-            border: 'none',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.3)'
-        }}>
-            {/* ── SIDEBAR ── */}
-            <aside className="dash-sidebar" style={{
-                borderRight: '1px dashed rgba(62,32,40,0.15)',
-                background: 'rgba(228, 213, 183, 0.4)',
-                backdropFilter: 'blur(10px)'
-            }}>
-                <div style={{ padding: '0 8px 24px', borderBottom: '1px dashed rgba(62,32,40,0.1)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                        <div className="wax-seal" style={{ width: '38px', height: '38px' }}></div>
-                        <h2 className="fraunces text-ink" style={{ fontSize: '1.2rem', fontWeight: 900 }}>
-                            Controller
-                        </h2>
-                    </div>
-                    <p className="lora italic" style={{ fontSize: '10px', opacity: 0.6 }}>AforPrint Admin Suite v2.0</p>
-                </div>
+  if (pathname?.startsWith("/admin/login")) {
+    return <>{children}</>;
+  }
 
-                <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '16px' }}>
-                    {NAV_ITEMS.map((item) => {
-                        const isActive = pathname === item.href;
-                        const Icon = item.icon;
-                        return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    padding: '10px 12px',
-                                    textDecoration: 'none',
-                                    borderRadius: '4px',
-                                    transition: 'all 0.2s ease',
-                                    background: isActive ? 'rgba(62, 32, 40, 0.08)' : 'transparent',
-                                    border: isActive ? '1px solid rgba(62, 32, 40, 0.1)' : '1px solid transparent'
-                                }}
-                            >
-                                <Icon size={16} color={isActive ? "var(--wax-red)" : "var(--ink-secondary)"} strokeWidth={isActive ? 2.5 : 2} />
-                                <span
-                                    className="label"
-                                    style={{
-                                        color: isActive ? 'var(--ink-primary)' : 'var(--ink-secondary)',
-                                        opacity: isActive ? 1 : 0.7,
-                                        fontSize: '11px',
-                                        fontWeight: isActive ? 700 : 500
-                                    }}
-                                >
-                                    {item.label}
-                                </span>
-                                {isActive && <ChevronRight size={12} style={{ marginLeft: 'auto', color: 'var(--wax-red)' }} />}
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                <div style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px dashed rgba(62,32,40,0.1)' }}>
-                    <Link href="/" style={{ textDecoration: 'none' }}>
-                        <div style={{
-                            padding: '12px',
-                            background: 'var(--ink-primary)',
-                            color: 'white',
-                            fontSize: '10px',
-                            textAlign: 'center',
-                            borderRadius: '2px',
-                            fontWeight: 700,
-                            letterSpacing: '1px',
-                            textTransform: 'uppercase'
-                        }}>
-                            Exit to Platform
-                        </div>
-                    </Link>
-                </div>
-            </aside>
-
-            {/* ── MAIN CONTENT ── */}
-            <main className="dash-content" style={{ padding: 0 }}>
-                <div style={{
-                    height: '100%',
-                    overflowY: 'auto',
-                    padding: '40px',
-                    backgroundImage: 'url("https://www.transparenttextures.com/patterns/paper-fibers.png")'
-                }}>
-                    {children}
-                </div>
-            </main>
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", width: "100%", background: "#f8f6f1" }}>
+      <aside
+        style={{
+          width: 240,
+          background: "#ffffff",
+          borderRight: "1px solid #e5e7eb",
+          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontWeight: 800, color: "#111827", fontSize: 18, marginBottom: 8 }}>AforPrint Admin</div>
+        {navItems.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                textDecoration: "none",
+                padding: "10px 12px",
+                borderRadius: 8,
+                background: active ? "#111827" : "transparent",
+                color: active ? "#ffffff" : "#111827",
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
+        <div style={{ marginTop: "auto" }}>
+          <Link href="/" style={{ textDecoration: "none", color: "#6b7280", fontSize: 13 }}>
+            Exit to platform
+          </Link>
         </div>
-    );
+      </aside>
+
+      <main style={{ flex: 1, padding: 20, color: "#111827" }}>{children}</main>
+    </div>
+  );
 }

@@ -14,11 +14,23 @@ enum Role {
   ADMIN
 }
 
+enum VendorApprovalStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum DeliveryType {
+  PICKUP
+  DELIVERY
+}
+
 enum OrderStatus {
   PENDING
   PAYMENT_PENDING
   PAID
   ACCEPTED
+  PRINTING
   READY
   COMPLETED
   REJECTED
@@ -51,7 +63,24 @@ model User {
   sessions      Session[]
   orders        Order[]       @relation("StudentOrders")
   vendorProfile VendorProfile?
+  studentProfile StudentProfile?
   logs          ActivityLog[]
+}
+
+model StudentProfile {
+  id                     String   @id @default(uuid())
+  userId                 String   @unique
+  name                   String?
+  phone                  String?
+  college                String?
+  university             String?
+  course                 String?
+  year                   String?
+  defaultDeliveryAddress String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Account {
@@ -96,6 +125,15 @@ model VendorProfile {
   ownerName        String?
   contactNumber    String?
   shopAddress      String?
+  latitude         Float?
+  longitude        Float?
+  openingTime      String?
+  closingTime      String?
+  servicesAvailable Json?
+  pricePerPageBW   Float?
+  pricePerPageColor Float?
+  upiId            String?
+  approvalStatus   VendorApprovalStatus @default(PENDING_APPROVAL)
   businessHours    Json?
   pricingConfig    Json?
   inventoryItems   Json?
@@ -140,6 +178,8 @@ model Order {
   copies          Int?
   printType       String? @default("BW")
   paperType       String? @default("STANDARD")
+  binding         String?
+  deliveryType    DeliveryType @default(PICKUP)
   deliveryAddress String?
 }
 

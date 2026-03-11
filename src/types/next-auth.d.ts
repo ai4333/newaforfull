@@ -5,10 +5,12 @@ declare module "next-auth" {
     user: {
       id: string;
       role?: "STUDENT" | "VENDOR" | "ADMIN";
+      isSuspended?: boolean;
     } & DefaultSession["user"];
   }
 
   interface User {
     role?: "STUDENT" | "VENDOR" | "ADMIN";
+    isSuspended?: boolean;
   }
 }

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+import { requireAdminApiUser } from "@/lib/auth-helpers";
 
 const createPayoutSchema = z.object({
   vendorId: z.string().uuid(),
@@ -12,28 +12,10 @@ const createPayoutSchema = z.object({
 const readLimiter = createRateLimiter(60, "1 m");
 const writeLimiter = createRateLimiter(20, "1 m");
 
-async function ensureAdmin() {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "ADMIN") {
-    return null;
-  }
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    return null;
-  }
-
-  return userId;
-}
-
 export async function GET() {
-  const userId = await ensureAdmin();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireAdminApiUser();
+  if ("response" in authResult) return authResult.response;
+  const userId = authResult.user.id;
 
   if (readLimiter) {
     const { success } = await readLimiter.limit(`admin-payouts-read:${userId}`);
@@ -62,10 +44,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const userId = await ensureAdmin();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireAdminApiUser();
+  if ("response" in authResult) return authResult.response;
+  const userId = authResult.user.id;
 
   if (writeLimiter) {
     const { success } = await writeLimiter.limit(`admin-payouts-write:${userId}`);

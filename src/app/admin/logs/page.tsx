@@ -11,8 +11,12 @@ export default async function AdminLogsPage() {
     const session = await auth();
     const role = (session?.user as { role?: string } | undefined)?.role;
 
-    if (!session?.user || role !== "ADMIN") {
+    if (!session?.user) {
         redirect('/admin/login?next=/admin/logs');
+    }
+
+    if (role !== "ADMIN") {
+        redirect('/');
     }
 
     const logs = await prisma.activityLog.findMany({

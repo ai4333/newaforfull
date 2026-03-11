@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+import { requireActiveUser } from "@/lib/auth-helpers";
 
 const itemSchema = z.object({
   name: z.string().min(1),
@@ -20,19 +20,22 @@ const readLimiter = createRateLimiter(60, "1 m");
 const writeLimiter = createRateLimiter(30, "1 m");
 
 async function ensureVendor() {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "VENDOR") {
+  const authResult = await requireActiveUser("VENDOR");
+  if ("response" in authResult) {
     return null;
   }
 
+  const userId = authResult.user.id;
+
   const profile = await prisma.vendorProfile.findUnique({
     where: { userId },
-    select: { id: true, userId: true },
+    select: { id: true, userId: true, approvalStatus: true },
   });
   if (!profile) {
+    return null;
+  }
+
+  if (profile.approvalStatus !== "APPROVED") {
     return null;
   }
 

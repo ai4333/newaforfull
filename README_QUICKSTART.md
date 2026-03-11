@@ -15,7 +15,7 @@ npm install
 
 Create or update your `.env` file with the required keys:
 
-- `DATABASE_URL` (Your Supabase PostgreSQL Connection String)
+- `DATABASE_URL` (Use Supabase Session Pooler URI for IPv4 compatibility)
 - `NEXTAUTH_URL=http://localhost:3000`
 - `NEXTAUTH_SECRET` (Run `openssl rand -base64 32` to generate one)
 - `GOOGLE_CLIENT_ID`
@@ -48,6 +48,8 @@ npm run dev
 The app is now running! 
 - **Main Home**: [http://localhost:3000](http://localhost:3000)
 - **Login Portal**: [http://localhost:3000/auth/login](http://localhost:3000/auth/login)
+- **Admin Login**: [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
+- **Admin Dashboard**: [http://localhost:3000/admin/dashboard](http://localhost:3000/admin/dashboard)
 
 ---
 
@@ -61,16 +63,35 @@ The app is now running!
 - **Orders Queue**: `http://localhost:3000/vendor/orders`
 - **Pricing Configuration**: `http://localhost:3000/vendor/pricing`
 
-### 👑 Admin Permissions
-To access the Admin Dashboard, your logged-in Google account **must** have the `ADMIN` role. 
-If this is your first time logging in, go to your Supabase SQL Editor and run:
-```sql
-UPDATE "User" SET role = 'ADMIN' WHERE email = 'your-email@gmail.com';
+### ADMIN ACCESS
+
+Admin login page:
+
+`http://localhost:3000/admin/login`
+
+Only emails listed in `ADMIN_EMAILS` can access admin dashboard.
+
+Example:
+
+```env
+ADMIN_EMAILS="admin@gmail.com"
 ```
 
-Then visit:
-- **Admin Dashboard**: `http://localhost:3000/admin/dashboard`
-*(Note: In production environments, admin access is restricted to the `admin.yourdomain.com` subdomain via `middleware.ts`, but in local development `localhost:3000/admin` is allowed for convenience).*
+Steps to enable admin locally:
+
+1. Add your email to `ADMIN_EMAILS` in `.env`
+2. Restart dev server
+3. Login via `/admin/login`
+
+Admin dashboard routes:
+
+- `/admin/dashboard`
+- `/admin/users`
+- `/admin/orders`
+- `/admin/shops`
+- `/admin/payouts`
+
+Normal users cannot access these pages.
 
 ---
 
@@ -81,6 +102,19 @@ Run a build check to ensure everything works before deploying:
 ```bash
 npm run build
 ```
+
+Optional runtime checks:
+
+```bash
+npx prisma db pull --print
+curl -i http://localhost:3000/admin/login
+curl -i http://localhost:3000/api/auth/signin
+```
+
+If admin pages show empty blocks, verify these first:
+- You are logged in with an allowlisted admin email from `ADMIN_EMAILS`
+- Database connectivity is healthy (`npx prisma db pull --print` should succeed)
+- You restarted the dev server after `.env` changes (`npm run dev`)
 
 **Note on Payments:**
 If your Razorpay keys are not set, the login and dashboard flows will still work perfectly, but the final payment checkout step will fail.

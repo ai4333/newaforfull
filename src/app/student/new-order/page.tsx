@@ -4,6 +4,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { PDFDocument } from 'pdf-lib';
+
+type Vendor = {
+    id: string;
+    shopName: string;
+    pricePerPageBW: number | null;
+    pricePerPageColor: number | null;
+    pricingConfig: any;
+};
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -56,14 +65,16 @@ export default function NewOrderPage() {
     const router = useRouter();
     const { data: session } = useSession();
     const [step, setStep] = useState<Step>(1);
-    const [vendors, setVendors] = useState<{ id: string; shopName: string }[]>([]);
+    const [vendors, setVendors] = useState<Vendor[]>([]);
     const [selectedVendorId, setSelectedVendorId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string>('');
     const [createdOrderId, setCreatedOrderId] = useState<string>('');
     const [paymentOrderId, setPaymentOrderId] = useState<string>('');
+    const [isDetectingPages, setIsDetectingPages] = useState(false);
     const [order, setOrder] = useState({
         file: null as File | null,
+        pages: 1,
         paperSize: 'A4',
         colorMode: 'Black & White',
         printSide: 'Single Side',
@@ -81,7 +92,7 @@ export default function NewOrderPage() {
             const res = await fetch('/api/student/vendors');
             if (res.ok) {
                 const data = await res.json();
-                const vendorRows = (data.vendors || []).map((v: { id: string; shopName: string }) => ({ id: v.id, shopName: v.shopName }));
+                const vendorRows = (data.vendors || []) as Vendor[];
                 setVendors(vendorRows);
                 if (vendorRows.length > 0) {
                     setSelectedVendorId(vendorRows[0].id);
@@ -91,9 +102,55 @@ export default function NewOrderPage() {
         loadVendors();
     }, []);
 
+    const selectedVendor = useMemo(() => {
+        return vendors.find(v => v.id === selectedVendorId);
+    }, [vendors, selectedVendorId]);
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] || null;
+        if (!file) {
+            setOrder(prev => ({ ...prev, file: null, pages: 1 }));
+            return;
+        }
+
+        setOrder(prev => ({ ...prev, file }));
+
+        if (file.type === 'application/pdf') {
+            setIsDetectingPages(true);
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                const pageCount = pdfDoc.getPageCount();
+                setOrder(prev => ({ ...prev, pages: Math.max(pageCount, 1) }));
+            } catch (err) {
+                console.error("PDF Parsing Error:", err);
+                // Fallback to 1 page if detection fails
+                setOrder(prev => ({ ...prev, pages: 1 }));
+            } finally {
+                setIsDetectingPages(false);
+            }
+        } else {
+            setOrder(prev => ({ ...prev, pages: 1 }));
+        }
+    };
+
     const estimatedBasePrice = useMemo(() => {
-        return Math.max(order.copies * 10, 10);
-    }, [order.copies]);
+        if (!selectedVendor) return 0;
+
+        const rate = order.colorMode === 'Color'
+            ? (selectedVendor.pricePerPageColor ?? 10)
+            : (selectedVendor.pricePerPageBW ?? 2);
+
+        // Basic calculation: pages * copies * rate
+        let price = order.pages * order.copies * rate;
+
+        // Add binding fee if applicable
+        if (order.binding !== 'No Binding') {
+            price += 30; // Placeholder binding fee
+        }
+
+        return Math.max(price, 10); // Minimum 10 rupees
+    }, [order.pages, order.copies, order.colorMode, order.binding, selectedVendor]);
 
     const steps = [
         { title: 'Upload', sub: 'Document' },
@@ -191,6 +248,12 @@ export default function NewOrderPage() {
                 body: JSON.stringify({
                     vendorId: selectedVendorId,
                     baseAmount: estimatedBasePrice,
+                    pages: order.pages,
+                    printType: order.colorMode === "Color" ? "COLOR" : "BW",
+                    copies: order.copies,
+                    binding: order.binding,
+                    deliveryType: "PICKUP",
+                    deliveryAddress: undefined,
                     files: uploadedFileMeta ? [uploadedFileMeta] : undefined,
                 }),
             });
@@ -322,7 +385,7 @@ export default function NewOrderPage() {
                                     }}
                                     onClick={() => document.getElementById('file-input')?.click()}
                                 >
-                                    <input id="file-input" type="file" hidden onChange={(e) => setOrder({ ...order, file: e.target.files?.[0] || null })} />
+                                    <input id="file-input" type="file" hidden onChange={handleFileChange} accept=".pdf,.docx,.zip" />
                                     <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', opacity: 0.4 }}>
                                         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -333,8 +396,13 @@ export default function NewOrderPage() {
                                         </svg>
                                     </div>
                                     <div className="nav-text" style={{ fontSize: '13px', marginBottom: '4px' }}>
-                                        {order.file ? order.file.name : 'Click to upload or drag & drop'}
+                                        {isDetectingPages ? 'Detecting pages...' : (order.file ? order.file.name : 'Click to upload or drag & drop')}
                                     </div>
+                                    {order.pages > 1 && !isDetectingPages && (
+                                        <div className="label" style={{ fontSize: '10px', color: 'var(--wax-red)', fontWeight: 700 }}>
+                                            {order.pages} pages detected
+                                        </div>
+                                    )}
                                     <div className="label" style={{ fontSize: '9px', opacity: 0.4 }}>PDF, DOCX, ZIP (MAX 20MB)</div>
                                 </div>
                             </div>
@@ -486,11 +554,11 @@ export default function NewOrderPage() {
                         <div className="founders-rule" style={{ opacity: 0.05, margin: '8px 0' }}></div>
 
                         <div className="flex justify-between" style={{ fontSize: '14px', fontWeight: 900 }}>
-                            <span className="fraunces">Est. Base Price</span>
+                            <span className="fraunces">Est. Total Price</span>
                             <span className="text-ink">₹{step > 5 ? estimatedBasePrice.toFixed(2) : '---'}</span>
                         </div>
                         <p className="label" style={{ fontSize: '8px', opacity: 0.4, fontStyle: 'italic' }}>
-                            *Vendors may have additional fees based on campus location.
+                            *Price = (Pages × Copies × Rate) + Binding. Detailed breakdown in Review step.
                         </p>
                         {createdOrderId && (
                             <p className="label" style={{ fontSize: '8px', opacity: 0.6 }}>

@@ -8,8 +8,12 @@ export default async function AdminOrdersPage() {
   const session = await auth();
   const role = (session?.user as { role?: string } | undefined)?.role;
 
-  if (!session?.user || role !== "ADMIN") {
+  if (!session?.user) {
     redirect("/admin/login?next=/admin/orders");
+  }
+
+  if (role !== "ADMIN") {
+    redirect("/");
   }
 
   return <AdminOrdersClient />;

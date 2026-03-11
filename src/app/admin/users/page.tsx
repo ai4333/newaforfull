@@ -12,6 +12,8 @@ type UserWithLogs = Prisma.UserGetPayload<{
     include: {
         logs: { take: 1; orderBy: { createdAt: 'desc' } };
         accounts: { select: { provider: true; providerAccountId: true } };
+        orders: { select: { totalPaid: true } };
+        studentProfile: true;
     }
 }>;
 
@@ -31,46 +33,69 @@ export default async function AdminUsersPage() {
     const session = await auth();
     const role = (session?.user as { role?: string } | undefined)?.role;
 
-    if (!session?.user || role !== "ADMIN") {
+    if (!session?.user) {
         redirect('/admin/login?next=/admin/users');
     }
 
-    const users = await prisma.user.findMany({
-        include: {
-            logs: {
-                orderBy: { createdAt: "desc" },
-                take: 1,
-            },
-            accounts: {
-                select: {
-                    provider: true,
+    if (role !== "ADMIN") {
+        redirect('/');
+    }
+
+    let loadError = "";
+    let users: UserWithLogs[] = [];
+    let activityLogs: LogWithUser[] = [];
+
+    try {
+        users = await prisma.user.findMany({
+            include: {
+                logs: {
+                    orderBy: { createdAt: "desc" },
+                    take: 1,
                 },
+                accounts: {
+                    select: {
+                        provider: true,
+                        providerAccountId: true,
+                    },
+                },
+                orders: {
+                    select: {
+                        totalPaid: true,
+                    }
+                },
+                studentProfile: true,
             },
-            orders: {
-                select: {
-                    totalPaid: true,
-                }
-            }
-        },
-        orderBy: { createdAt: "desc" },
-    });
+            orderBy: { createdAt: "desc" },
+        }) as UserWithLogs[];
+
+        activityLogs = await prisma.activityLog.findMany({
+            include: { user: true },
+            orderBy: { createdAt: "desc" },
+            take: 20,
+        });
+    } catch {
+        loadError = "User registry data is temporarily unavailable because of a database connection issue.";
+    }
 
     const studentCount = users.filter(u => u.role === 'STUDENT').length;
     const vendorCount = users.filter(u => u.role === 'VENDOR').length;
     const adminCount = users.filter(u => u.role === 'ADMIN').length;
-
-    const activityLogs: LogWithUser[] = await prisma.activityLog.findMany({
-        include: { user: true },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-    });
 
     return (
         <div className="reveal-up active">
             <header style={{ marginBottom: '2.5rem' }}>
                 <h2 className="fraunces text-ink" style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '0.5rem' }}>User Registry</h2>
                 <p className="lora italic opacity-60">"Comprehensive monitoring of the AforPrint ecosystem's active participants."</p>
+                <p className="label" style={{ marginTop: '8px', fontSize: '10px', opacity: 0.6 }}>
+                    Signed in as: {session.user.email || "admin"}
+                </p>
             </header>
+
+            {loadError ? (
+                <div className="paper-sheet" style={{ padding: '12px', marginBottom: '1rem', color: 'var(--wax-red)', fontSize: '12px' }}>
+                    {loadError}
+                </div>
+            ) : null}
 
             {/* ── PLATFORM STATS ── */}
             <div className="admin-grid-3" style={{ marginBottom: '2.5rem' }}>
@@ -114,6 +139,7 @@ export default async function AdminUsersPage() {
                                     const totalSpending = u.orders.reduce((sum, o) => sum + (o.totalPaid || 0), 0);
                                     const orderCount = u.orders.length;
                                     const profile = u as any & ExtendedProfileFields;
+                                    const studentProfile = (u as any).studentProfile as { college?: string | null; course?: string | null; year?: string | null } | null;
                                     const lastLogin = u.logs[0]?.createdAt;
 
                                     return (
@@ -121,6 +147,11 @@ export default async function AdminUsersPage() {
                                             <td style={{ padding: '15px 10px' }}>
                                                 <div style={{ fontWeight: 700, fontSize: '14px' }} className="text-ink">{u.name || "Anonymous Student"}</div>
                                                 <div style={{ fontSize: '10px', opacity: 0.6 }}>{u.email}</div>
+                                                {u.role === 'STUDENT' && studentProfile ? (
+                                                    <div style={{ fontSize: '9px', marginTop: '4px', opacity: 0.6 }}>
+                                                        {studentProfile.college || 'College not set'} • {studentProfile.course || 'Course not set'} {studentProfile.year ? `(${studentProfile.year})` : ''}
+                                                    </div>
+                                                ) : null}
                                                 <div style={{ fontSize: '9px', marginTop: '4px' }}>
                                                     <span style={{
                                                         fontSize: '8px',

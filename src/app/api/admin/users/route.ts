@@ -12,7 +12,7 @@ export async function GET() {
   }
 
   if (readLimiter) {
-    const { success } = await readLimiter.limit(`admin-vendors-read:${authResult.user.id}`);
+    const { success } = await readLimiter.limit(`admin-users-read:${authResult.user.id}`);
     if (!success) {
       return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
     }
@@ -20,20 +20,18 @@ export async function GET() {
     return NextResponse.json({ error: "Rate limiting unavailable" }, { status: 500 });
   }
 
-  const vendors = await prisma.vendorProfile.findMany({
+  const users = await prisma.user.findMany({
     select: {
       id: true,
-      shopName: true,
-      user: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
+      name: true,
+      email: true,
+      role: true,
+      isSuspended: true,
+      createdAt: true,
     },
-    orderBy: { shopName: "asc" },
+    orderBy: { createdAt: "desc" },
     take: 200,
   });
 
-  return NextResponse.json({ vendors });
+  return NextResponse.json({ users });
 }

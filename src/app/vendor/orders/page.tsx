@@ -10,9 +10,9 @@ type VendorOrder = {
 };
 
 const statusFlow: Record<string, string[]> = {
-  PAYMENT_PENDING: ["ACCEPTED", "REJECTED"],
   PAID: ["ACCEPTED", "REJECTED"],
-  ACCEPTED: ["READY"],
+  ACCEPTED: ["PRINTING"],
+  PRINTING: ["READY"],
   READY: ["COMPLETED"],
 };
 
@@ -100,6 +100,7 @@ export default function VendorOrdersPage() {
             <option value="PAYMENT_PENDING">Payment Pending</option>
             <option value="PAID">Paid</option>
             <option value="ACCEPTED">Accepted</option>
+            <option value="PRINTING">Printing</option>
             <option value="READY">Ready</option>
             <option value="COMPLETED">Completed</option>
             <option value="REJECTED">Rejected</option>

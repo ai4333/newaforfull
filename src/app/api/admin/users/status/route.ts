@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+import { requireAdminApiUser } from "@/lib/auth-helpers";
 
 const requestSchema = z.object({
   userId: z.string().uuid(),
@@ -12,13 +12,9 @@ const requestSchema = z.object({
 const writeLimiter = createRateLimiter(30, "1 m");
 
 export async function PATCH(req: Request) {
-  const session = await auth();
-  const adminId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!adminId || role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authResult = await requireAdminApiUser();
+  if ("response" in authResult) return authResult.response;
+  const adminId = authResult.user.id;
 
   if (writeLimiter) {
     const { success } = await writeLimiter.limit(`admin-user-status:${adminId}`);

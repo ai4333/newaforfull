@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+import { requireActiveUser } from "@/lib/auth-helpers";
 
 const requestSchema = z.object({
   orderId: z.string().uuid(),
@@ -12,8 +12,8 @@ const rateLimiter = createRateLimiter(5, "1 m");
 
 export async function POST(req: Request) {
   if (rateLimiter) {
-    const session = await auth();
-    const identity = session?.user?.id ?? req.headers.get("x-forwarded-for") ?? "anonymous";
+    const authResult = await requireActiveUser("STUDENT");
+    const identity = "response" in authResult ? req.headers.get("x-forwarded-for") ?? "anonymous" : authResult.user.id;
     const { success } = await rateLimiter.limit(`payment-create:${identity}`);
     if (!success) {
       return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
@@ -22,18 +22,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Rate limiting unavailable" }, { status: 500 });
   }
 
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "STUDENT") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireActiveUser("STUDENT");
+  if ("response" in authResult) {
+    return authResult.response;
   }
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = authResult.user.id;
 
   const body = await req.json();
   const parsed = requestSchema.safeParse(body);
@@ -54,6 +47,10 @@ export async function POST(req: Request) {
 
   if (order.status === "PAID") {
     return NextResponse.json({ error: "Order already paid" }, { status: 409 });
+  }
+
+  if (order.status !== "PAYMENT_PENDING") {
+    return NextResponse.json({ error: `Payment cannot be created in status ${order.status}` }, { status: 409 });
   }
 
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -95,7 +92,7 @@ export async function POST(req: Request) {
   await prisma.$transaction([
     prisma.order.update({
       where: { id: order.id },
-      data: { razorpayOrderId: data.id, status: "PAYMENT_PENDING" },
+      data: { razorpayOrderId: data.id },
     }),
     prisma.activityLog.create({
       data: {

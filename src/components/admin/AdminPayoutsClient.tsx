@@ -32,26 +32,41 @@ export function AdminPayoutsClient() {
 
   const loadPayouts = async () => {
     setLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/admin/payouts");
       if (res.ok) {
         const data = await res.json();
         setPayouts(data.payouts || []);
+      } else {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload?.error || "Unable to load payouts right now.");
+        setPayouts([]);
       }
+    } catch {
+      setError("Unable to load payouts right now.");
+      setPayouts([]);
     } finally {
       setLoading(false);
     }
   };
 
   const loadVendors = async () => {
-    const res = await fetch("/api/admin/vendors");
-    if (res.ok) {
-      const data = await res.json();
-      const rows = (data.vendors || []) as VendorRow[];
-      setVendors(rows);
-      if (rows.length > 0) {
-        setSelectedVendorId((current) => current || rows[0].id);
+    try {
+      const res = await fetch("/api/admin/vendors");
+      if (res.ok) {
+        const data = await res.json();
+        const rows = (data.vendors || []) as VendorRow[];
+        setVendors(rows);
+        if (rows.length > 0) {
+          setSelectedVendorId((current) => current || rows[0].id);
+        }
+      } else {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload?.error || "Unable to load vendors right now.");
       }
+    } catch {
+      setError("Unable to load vendors right now.");
     }
   };
 
@@ -70,7 +85,12 @@ export function AdminPayoutsClient() {
       });
       if (res.ok) {
         await loadPayouts();
+      } else {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload?.error || "Failed to update payout status.");
       }
+    } catch {
+      setError("Failed to update payout status.");
     } finally {
       setPendingId(null);
     }
@@ -93,12 +113,15 @@ export function AdminPayoutsClient() {
       });
 
       if (!res.ok) {
-        setError("Failed to create payout.");
+        const payload = await res.json().catch(() => ({}));
+        setError(payload?.error || "Failed to create payout.");
         return;
       }
 
       setAmount("");
       await loadPayouts();
+    } catch {
+      setError("Failed to create payout.");
     } finally {
       setCreating(false);
     }

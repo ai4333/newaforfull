@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+import { requireAdminApiUser } from "@/lib/auth-helpers";
 
 const querySchema = z.object({
   orderId: z.string().uuid(),
@@ -16,17 +16,10 @@ const createSchema = z.object({
 const readLimiter = createRateLimiter(80, "1 m");
 const writeLimiter = createRateLimiter(40, "1 m");
 
-async function ensureAdmin() {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  if (!userId || role !== "ADMIN") return null;
-  return userId;
-}
-
 export async function GET(req: Request) {
-  const adminId = await ensureAdmin();
-  if (!adminId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireAdminApiUser();
+  if ("response" in authResult) return authResult.response;
+  const adminId = authResult.user.id;
 
   if (readLimiter) {
     const { success } = await readLimiter.limit(`admin-order-notes-read:${adminId}`);
@@ -54,8 +47,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const adminId = await ensureAdmin();
-  if (!adminId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireAdminApiUser();
+  if ("response" in authResult) return authResult.response;
+  const adminId = authResult.user.id;
 
   if (writeLimiter) {
     const { success } = await writeLimiter.limit(`admin-order-notes-write:${adminId}`);

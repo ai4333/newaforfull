@@ -1,30 +1,27 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { OrderStatus } from "@prisma/client";
 import { resolveStoredFileUrl } from "@/lib/supabase-server";
+import { requireActiveUser } from "@/lib/auth-helpers";
 
 export async function GET(req: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "VENDOR") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireActiveUser("VENDOR");
+  if ("response" in authResult) {
+    return authResult.response;
   }
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = authResult.user.id;
 
   const vendorProfile = await prisma.vendorProfile.findUnique({
     where: { userId },
-    select: { id: true },
+    select: { id: true, approvalStatus: true },
   });
 
   if (!vendorProfile) {
     return NextResponse.json({ error: "Vendor profile not found" }, { status: 404 });
+  }
+
+  if (vendorProfile.approvalStatus !== "APPROVED") {
+    return NextResponse.json({ error: "Vendor account pending admin approval" }, { status: 403 });
   }
 
   const url = new URL(req.url);

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { verifyRazorpaySignature } from "@/lib/payments";
+import { requireActiveUser } from "@/lib/auth-helpers";
 
 const requestSchema = z.object({
   orderId: z.string().uuid(),
@@ -12,18 +12,11 @@ const requestSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "STUDENT") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireActiveUser("STUDENT");
+  if ("response" in authResult) {
+    return authResult.response;
   }
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = authResult.user.id;
 
   const body = await req.json();
   const parsed = requestSchema.safeParse(body);

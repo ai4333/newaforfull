@@ -1,5 +1,4 @@
 import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
@@ -15,6 +14,18 @@ function getAdminEmails() {
 function shouldBeAdmin(email?: string | null) {
     if (!email) return false;
     return getAdminEmails().includes(email.toLowerCase());
+}
+
+function resolveEffectiveRole(dbRole: Role, email?: string | null): Role {
+    if (shouldBeAdmin(email)) {
+        return "ADMIN";
+    }
+
+    if (dbRole === "ADMIN") {
+        return "STUDENT";
+    }
+
+    return dbRole;
 }
 
 import { authConfig } from "./auth.config";
@@ -36,12 +47,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
             const dbUser = await prisma.user.findUnique({
                 where: { id: userId },
-                select: { role: true, email: true },
+                select: { role: true, email: true, isSuspended: true },
             });
 
             if (dbUser) {
                 token.id = userId;
-                token.role = shouldBeAdmin(dbUser.email) ? "ADMIN" : dbUser.role;
+                token.role = resolveEffectiveRole(dbUser.role, dbUser.email);
+                token.isSuspended = dbUser.isSuspended;
             }
 
             return token;
@@ -50,6 +62,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             if (session.user && token) {
                 session.user.id = ((token.id as string | undefined) ?? token.sub) as string;
                 session.user.role = ((token.role as Role | undefined) ?? "STUDENT") as Role;
+                session.user.isSuspended = Boolean(token.isSuspended);
             }
 
             return session;
@@ -59,7 +72,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 const existingUser = await prisma.user.findUnique({ where: { id: user.id } });
                 if (existingUser) {
                     const resolvedEmail = user.email ?? existingUser.email;
-                    const role: Role = shouldBeAdmin(resolvedEmail) ? "ADMIN" : existingUser.role;
+                    const role: Role = resolveEffectiveRole(existingUser.role, resolvedEmail);
 
                     await prisma.user.update({
                         where: { id: user.id },
@@ -70,6 +83,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             role,
                         },
                     });
+
+                    if (role === "STUDENT") {
+                        await prisma.studentProfile.upsert({
+                            where: { userId: user.id },
+                            update: {
+                                name: user.name ?? undefined,
+                            },
+                            create: {
+                                userId: user.id,
+                                name: user.name ?? undefined,
+                            },
+                        });
+                    }
+
+                    if (role === "VENDOR") {
+                        await prisma.vendorProfile.upsert({
+                            where: { userId: user.id },
+                            update: {},
+                            create: {
+                                userId: user.id,
+                                shopName: user.name ? `${user.name} Print Shop` : "Campus Print Vendor",
+                                approvalStatus: "PENDING_APPROVAL",
+                            },
+                        });
+                    }
 
                     await prisma.activityLog.create({
                         data: {
@@ -95,6 +133,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     data: { role: "ADMIN" },
                 });
             }
+
+            await prisma.studentProfile.upsert({
+                where: { userId: user.id },
+                update: {
+                    name: user.name ?? undefined,
+                },
+                create: {
+                    userId: user.id,
+                    name: user.name ?? undefined,
+                },
+            });
 
             await prisma.activityLog.create({
                 data: {

@@ -13,8 +13,12 @@ export default async function VendorLayout({ children }: { children: React.React
 
     const vendorProfile = await prisma.vendorProfile.findUnique({
         where: { userId: session.user.id },
-        select: { shopName: true },
+        select: { shopName: true, approvalStatus: true },
     });
+
+    if (!vendorProfile || vendorProfile.approvalStatus !== "APPROVED") {
+        redirect("/auth/vendor-onboarding");
+    }
 
     const shopName = vendorProfile?.shopName || "University Print Hub";
 

@@ -11,13 +11,31 @@ type OrderRow = {
     totalPaid: number;
 };
 
+type StudentProfile = {
+    name: string | null;
+    college: string | null;
+    course: string | null;
+    year: string | null;
+};
+
 export default function StudentDashboard() {
     const [orders, setOrders] = useState<OrderRow[]>([]);
+    const [profile, setProfile] = useState<StudentProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const load = async () => {
             try {
+                const profileRes = await fetch("/api/student/profile");
+                if (profileRes.ok) {
+                    const profileData = await profileRes.json();
+                    if (!profileData?.completed) {
+                        window.location.href = "/student/onboarding";
+                        return;
+                    }
+                    setProfile(profileData.profile || null);
+                }
+
                 const res = await fetch("/api/student/orders");
                 if (res.ok) {
                     const data = await res.json();
@@ -50,6 +68,11 @@ export default function StudentDashboard() {
                     <p className="lora" style={{ fontStyle: "italic", fontSize: "13px", opacity: 0.6 }}>
                         "Ready to turn your digital drafts into physical documents?"
                     </p>
+                    {profile ? (
+                        <p className="label" style={{ marginTop: "8px", fontSize: "10px", opacity: 0.6 }}>
+                            {profile.name || "Student"} • {profile.college || "College not set"} • {profile.course || "Course"} {profile.year ? `(${profile.year})` : ""}
+                        </p>
+                    ) : null}
                 </div>
 
                 <div style={{ display: "flex", gap: "12px" }}>

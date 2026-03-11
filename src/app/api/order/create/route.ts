@@ -4,10 +4,18 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateOrderBreakdown } from "@/lib/payments";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
+import { DeliveryType } from "@prisma/client";
+import { requireActiveUser } from "@/lib/auth-helpers";
 
 const requestSchema = z.object({
   vendorId: z.string().uuid(),
   baseAmount: z.number().positive(),
+  pages: z.number().int().positive().optional(),
+  printType: z.string().min(1).max(40).optional(),
+  copies: z.number().int().positive().optional(),
+  binding: z.string().min(1).max(60).optional(),
+  deliveryType: z.nativeEnum(DeliveryType).optional(),
+  deliveryAddress: z.string().min(5).max(400).optional(),
   files: z
     .array(
       z.object({
@@ -33,18 +41,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Rate limiting unavailable" }, { status: 500 });
   }
 
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "STUDENT") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireActiveUser("STUDENT");
+  if ("response" in authResult) {
+    return authResult.response;
   }
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = authResult.user.id;
 
   const body = await req.json();
   const parsed = requestSchema.safeParse(body);
@@ -70,14 +71,20 @@ export async function POST(req: Request) {
         vendorId: parsed.data.vendorId,
         status: "PAYMENT_PENDING",
         ...breakdown,
+        pages: parsed.data.pages ?? 1,
+        printType: parsed.data.printType,
+        copies: parsed.data.copies,
+        binding: parsed.data.binding,
+        deliveryType: parsed.data.deliveryType,
+        deliveryAddress: parsed.data.deliveryAddress,
         files: parsed.data.files
           ? {
-              create: parsed.data.files.map((file) => ({
-                fileUrl: file.fileUrl,
-                fileName: file.fileName,
-                fileSize: file.fileSize,
-              })),
-            }
+            create: parsed.data.files.map((file) => ({
+              fileUrl: file.fileUrl,
+              fileName: file.fileName,
+              fileSize: file.fileSize,
+            })),
+          }
           : undefined,
       },
     });

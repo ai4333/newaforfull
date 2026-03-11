@@ -46,6 +46,7 @@ export function AdminOrdersClient() {
 
   const loadOrders = async () => {
     setLoading(true);
+    setError("");
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "ALL") params.set("status", statusFilter);
@@ -56,7 +57,14 @@ export function AdminOrdersClient() {
       if (res.ok) {
         const data = await res.json();
         setOrders(data.orders || []);
+      } else {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload?.error || "Unable to load orders right now.");
+        setOrders([]);
       }
+    } catch {
+      setError("Unable to load orders right now.");
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -70,8 +78,13 @@ export function AdminOrdersClient() {
         const data = await res.json();
         setNotes(data.notes || []);
       } else {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload?.error || "Unable to load order notes.");
         setNotes([]);
       }
+    } catch {
+      setError("Unable to load order notes.");
+      setNotes([]);
     } finally {
       setNoteLoading(false);
     }
@@ -155,6 +168,7 @@ export function AdminOrdersClient() {
             <option value="ALL">All Statuses</option>
             <option value="PAID">Paid</option>
             <option value="ACCEPTED">Accepted</option>
+            <option value="PRINTING">Printing</option>
             <option value="READY">Ready for Pickup</option>
             <option value="COMPLETED">Completed</option>
             <option value="DISPUTED">Disputed</option>

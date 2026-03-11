@@ -1,23 +1,20 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
 import { OrderStatus } from "@prisma/client";
 import { resolveStoredFileUrl } from "@/lib/supabase-server";
+import { requireAdminApiUser } from "@/lib/auth-helpers";
 
 const readLimiter = createRateLimiter(60, "1 m");
 
 export async function GET(req: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const role = (session?.user as { role?: string } | undefined)?.role;
-
-  if (!userId || role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await requireAdminApiUser();
+  if ("response" in authResult) {
+    return authResult.response;
   }
 
   if (readLimiter) {
-    const { success } = await readLimiter.limit(`admin-orders-read:${userId}`);
+    const { success } = await readLimiter.limit(`admin-orders-read:${authResult.user.id}`);
     if (!success) {
       return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
     }
