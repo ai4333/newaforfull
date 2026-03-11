@@ -3,12 +3,13 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import Link from 'next/link';
 
-export default function BatchTracking({ params }: { params: { id: string } }) {
+export default async function BatchTracking({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
     return (
         <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
             <header style={{ marginBottom: '2rem' }}>
                 <Link href="/delivery/dashboard" style={{ color: 'hsl(var(--primary))', textDecoration: 'none', marginBottom: '1rem', display: 'block' }}>← Back to Dashboard</Link>
-                <h1 style={{ fontSize: '2rem' }}>Active Batch: {params.id}</h1>
+                <h1 style={{ fontSize: '2rem' }}>Active Batch: {id}</h1>
             </header>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: '2rem' }}>
