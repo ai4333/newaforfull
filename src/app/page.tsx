@@ -291,7 +291,7 @@ export default function Home() {
             <div className="founder-role">Founder</div>
             <div className="founder-divider"></div>
             <p className="founder-bio">
-              <span className="typewriter" data-speed="10">We built AforPrint because we were tired of missing lectures just to print an assignment. Every minute a student spends hunting for a printer is a minute stolen from learning. This platform gives that time back.</span>
+              <span className="typewriter" data-speed="10">Walking to printers felt like bad design. So I redesigned it.</span>
             </p>
             <span className="founder-sig">Nikhil Sridhara</span>
             <div className="sig-underline"></div>
