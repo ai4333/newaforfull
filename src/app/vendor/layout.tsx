@@ -7,7 +7,19 @@ export default async function VendorLayout({ children }: { children: React.React
     const session = await auth();
     const role = (session?.user as { role?: string } | undefined)?.role;
 
-    if (!session?.user || role !== "VENDOR") {
+    if (!session?.user) {
+        redirect("/auth/login");
+    }
+
+    if (role === "STUDENT") {
+        redirect("/student/dashboard");
+    }
+
+    if (role === "ADMIN") {
+        redirect("/admin/dashboard");
+    }
+
+    if (role !== "VENDOR") {
         redirect("/auth/login");
     }
 

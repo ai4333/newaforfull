@@ -69,6 +69,7 @@ export async function GET() {
       userId: authResult.user.id,
       shopName: authResult.user.name ? `${authResult.user.name} Print Shop` : "Campus Print Vendor",
       approvalStatus: "PENDING_APPROVAL",
+      acceptingOrders: false,
     },
     select: {
       id: true,
@@ -133,6 +134,7 @@ export async function PATCH(req: Request) {
         pricePerPageColor: parsed.data.pricePerPageColor,
         upiId: parsed.data.upiId,
         approvalStatus: "PENDING_APPROVAL",
+        acceptingOrders: false,
       },
       create: {
         userId: authResult.user.id,
@@ -147,6 +149,7 @@ export async function PATCH(req: Request) {
         pricePerPageColor: parsed.data.pricePerPageColor,
         upiId: parsed.data.upiId,
         approvalStatus: "PENDING_APPROVAL",
+        acceptingOrders: false,
       },
     });
 

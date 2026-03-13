@@ -100,11 +100,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     if (role === "VENDOR") {
                         await prisma.vendorProfile.upsert({
                             where: { userId: user.id },
-                            update: {},
+                            update: {
+                                acceptingOrders: false,
+                            },
                             create: {
                                 userId: user.id,
                                 shopName: user.name ? `${user.name} Print Shop` : "Campus Print Vendor",
                                 approvalStatus: "PENDING_APPROVAL",
+                                acceptingOrders: false,
                             },
                         });
                     }

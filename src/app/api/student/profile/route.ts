@@ -81,7 +81,13 @@ export async function PATCH(req: Request) {
 
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: "Invalid request",
+        details: parsed.error.flatten().fieldErrors,
+      },
+      { status: 400 }
+    );
   }
 
   const profile = await prisma.$transaction(async (tx) => {

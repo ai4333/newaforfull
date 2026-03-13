@@ -3,7 +3,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { PDFDocument } from 'pdf-lib';
 
 type Vendor = {
@@ -141,13 +140,19 @@ export default function NewOrderPage() {
             ? (selectedVendor.pricePerPageColor ?? 10)
             : (selectedVendor.pricePerPageBW ?? 2);
 
-        // Basic calculation: pages * copies * rate
-        let price = order.pages * order.copies * rate;
+        const bindingFees: Record<string, number> = {
+            'No Binding': 0,
+            'Spiral Binding': 30,
+            'Soft Binding': 45,
+            'Hard Binding': 80,
+            'Staple (Top Left)': 5,
+            'Center Pin': 8,
+            'Lamination (Front Only)': 20,
+            'Lamination (Both Sides)': 35,
+        };
 
-        // Add binding fee if applicable
-        if (order.binding !== 'No Binding') {
-            price += 30; // Placeholder binding fee
-        }
+        let price = order.pages * order.copies * rate;
+        price += bindingFees[order.binding] ?? 0;
 
         return Math.max(price, 10); // Minimum 10 rupees
     }, [order.pages, order.copies, order.colorMode, order.binding, selectedVendor]);
@@ -198,47 +203,35 @@ export default function NewOrderPage() {
                 | undefined;
 
             if (order.file) {
-                const createUploadRes = await fetch('/api/upload/create', {
+                const formData = new FormData();
+                formData.append('file', order.file);
+
+                const uploadRes = await fetch('/api/upload/file', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        fileName: order.file.name,
-                        fileSize: order.file.size,
-                        mimeType: order.file.type || 'application/octet-stream',
-                    }),
+                    body: formData,
                 });
 
-                if (!createUploadRes.ok) {
-                    setError('Failed to initialize file upload.');
+                if (!uploadRes.ok) {
+                    const payload = await uploadRes.json().catch(() => ({}));
+                    setError(payload?.error || 'File upload failed. Please retry.');
                     return;
                 }
 
-                const uploadInfo = await createUploadRes.json() as {
-                    bucket: string;
-                    path: string;
-                    token: string;
-                    storedFileUrl: string;
+                const uploadInfo = await uploadRes.json() as {
+                    fileUrl: string;
+                    fileName: string;
+                    fileSize: number;
+                    pageCount: number;
                 };
 
-                const supabase = getSupabaseBrowserClient();
-                if (!supabase) {
-                    setError('Supabase browser client not configured.');
-                    return;
-                }
-
-                const uploadRes = await supabase.storage
-                    .from(uploadInfo.bucket)
-                    .uploadToSignedUrl(uploadInfo.path, uploadInfo.token, order.file);
-
-                if (uploadRes.error) {
-                    setError('File upload failed. Please retry.');
-                    return;
+                if (uploadInfo.pageCount > 0 && uploadInfo.pageCount !== order.pages) {
+                    setOrder(prev => ({ ...prev, pages: uploadInfo.pageCount }));
                 }
 
                 uploadedFileMeta = {
-                    fileUrl: uploadInfo.storedFileUrl,
-                    fileName: order.file.name,
-                    fileSize: order.file.size,
+                    fileUrl: uploadInfo.fileUrl,
+                    fileName: uploadInfo.fileName,
+                    fileSize: uploadInfo.fileSize,
                 };
             }
 
@@ -247,7 +240,6 @@ export default function NewOrderPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     vendorId: selectedVendorId,
-                    baseAmount: estimatedBasePrice,
                     pages: order.pages,
                     printType: order.colorMode === "Color" ? "COLOR" : "BW",
                     copies: order.copies,
@@ -259,7 +251,8 @@ export default function NewOrderPage() {
             });
 
             if (!createRes.ok) {
-                setError('Failed to create order.');
+                const payload = await createRes.json().catch(() => ({}));
+                setError(payload?.error || 'Failed to create order.');
                 return;
             }
 
@@ -274,7 +267,8 @@ export default function NewOrderPage() {
             });
 
             if (!paymentRes.ok) {
-                setError('Failed to create payment order.');
+                const payload = await paymentRes.json().catch(() => ({}));
+                setError(payload?.error || 'Failed to create payment order.');
                 return;
             }
 
@@ -328,6 +322,10 @@ export default function NewOrderPage() {
             });
 
             razorpay.open();
+
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unexpected error while creating order.';
+            setError(message);
 
         } finally {
             setIsSubmitting(false);
@@ -385,7 +383,7 @@ export default function NewOrderPage() {
                                     }}
                                     onClick={() => document.getElementById('file-input')?.click()}
                                 >
-                                    <input id="file-input" type="file" hidden onChange={handleFileChange} accept=".pdf,.docx,.zip" />
+                                    <input id="file-input" type="file" hidden onChange={handleFileChange} accept=".pdf,.doc,.docx,.zip,.png,.jpg,.jpeg" />
                                     <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', opacity: 0.4 }}>
                                         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -403,7 +401,19 @@ export default function NewOrderPage() {
                                             {order.pages} pages detected
                                         </div>
                                     )}
-                                    <div className="label" style={{ fontSize: '9px', opacity: 0.4 }}>PDF, DOCX, ZIP (MAX 20MB)</div>
+                                    <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center' }}>
+                                        <label className="label" style={{ fontSize: '9px' }}>Pages</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            className="ink-input"
+                                            style={{ width: '90px', textAlign: 'center', padding: '6px 8px' }}
+                                            value={order.pages}
+                                            onChange={(ev) => setOrder(prev => ({ ...prev, pages: Math.max(1, Number(ev.target.value) || 1) }))}
+                                        />
+                                    </div>
+                                    <div className="label" style={{ fontSize: '9px', opacity: 0.4 }}>PDF, DOC, DOCX, ZIP, PNG, JPG (MAX 20MB)</div>
+                                    <div className="label" style={{ fontSize: '8px', opacity: 0.5 }}>PDF pages are auto-detected. For other files, adjust pages manually.</div>
                                 </div>
                             </div>
                         )}

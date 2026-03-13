@@ -1,124 +1,50 @@
-import React from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { Save, Bell, Lock, Globe, Database } from "lucide-react";
-export const dynamic = 'force-dynamic';
+import { prisma } from "@/lib/prisma";
+import { storageBucket } from "@/lib/supabase-server";
 
+export const dynamic = "force-dynamic";
 
 export default async function AdminSettingsPage() {
-    const session = await auth();
-    const role = (session?.user as { role?: string } | undefined)?.role;
+  const session = await auth();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  if (!session?.user) redirect("/admin/login?next=/admin/settings");
+  if (role !== "ADMIN") redirect("/");
 
-    if (!session?.user) {
-        redirect('/admin/login?next=/admin/settings');
-    }
+  const [users, vendors, orders, files] = await Promise.all([
+    prisma.user.count(),
+    prisma.vendorProfile.count(),
+    prisma.order.count(),
+    prisma.orderFile.count(),
+  ]);
 
-    if (role !== "ADMIN") {
-        redirect('/');
-    }
+  const hasRazorpay = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+  const hasSupabaseStorage = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim()).filter(Boolean);
 
-    return (
-        <div className="reveal-up active">
-            <header style={{ marginBottom: '2.5rem' }}>
-                <h2 className="fraunces text-ink" style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '0.5rem' }}>Platform Covenant</h2>
-                <p className="lora italic opacity-60">"Adjusting the fundamental parameters of the AforPrint ecosystem."</p>
-            </header>
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <div>
+        <h1 style={{ fontSize: 28, marginBottom: 4 }}>Platform Settings</h1>
+        <div style={{ color: "#6b7280", fontSize: 13 }}>Live system configuration and readiness checks.</div>
+      </div>
 
-            <div className="admin-grid-4" style={{ marginBottom: '2.5rem' }}>
-                <section className="paper-sheet" style={{ padding: '1.2rem' }}>
-                    <div className="label" style={{ fontSize: '8px', marginBottom: '8px' }}>Security Level</div>
-                    <div style={{ fontSize: '10px', fontWeight: 900, color: 'var(--wax-red)' }}>MAXIMUM</div>
-                </section>
-                <section className="paper-sheet" style={{ padding: '1.2rem' }}>
-                    <div className="label" style={{ fontSize: '8px', marginBottom: '8px' }}>Global Commission</div>
-                    <div className="fraunces text-ink" style={{ fontSize: '1.2rem', fontWeight: 800 }}>11% per Side</div>
-                </section>
-                <section className="paper-sheet" style={{ padding: '1.2rem' }}>
-                    <div className="label" style={{ fontSize: '8px', marginBottom: '8px' }}>API Version</div>
-                    <div className="fraunces text-ink" style={{ fontSize: '1.2rem', fontWeight: 800 }}>v2.4 LTS</div>
-                </section>
-                <section className="paper-sheet" style={{ padding: '1.2rem' }}>
-                    <div className="label" style={{ fontSize: '8px', marginBottom: '8px' }}>CDN Latency</div>
-                    <div style={{ fontSize: '10px', fontWeight: 900, color: '#10b981' }}>12ms (Optimal)</div>
-                </section>
-            </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
+        <div className="paper-sheet" style={{ padding: 12 }}><div className="label">Users</div><div className="fraunces">{users}</div></div>
+        <div className="paper-sheet" style={{ padding: 12 }}><div className="label">Vendors</div><div className="fraunces">{vendors}</div></div>
+        <div className="paper-sheet" style={{ padding: 12 }}><div className="label">Orders</div><div className="fraunces">{orders}</div></div>
+        <div className="paper-sheet" style={{ padding: 12 }}><div className="label">Files</div><div className="fraunces">{files}</div></div>
+      </div>
 
-            <div className="admin-main-grid">
-                <section className="paper-sheet">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '25px' }}>
-                        <Globe size={18} className="text-ink" />
-                        <h3 className="fraunces text-ink" style={{ fontSize: '1.2rem' }}>Universal Parameters</h3>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        <div>
-                            <label className="label" style={{ fontSize: '9px', marginBottom: '8px', display: 'block' }}>Platform Name</label>
-                            <input className="ink-input" defaultValue="AforPrint: Campus Logistics" style={{ width: '100%', fontSize: '12px' }} />
-                        </div>
-                        <div>
-                            <label className="label" style={{ fontSize: '9px', marginBottom: '8px', display: 'block' }}>Support Email</label>
-                            <input className="ink-input" defaultValue="parchment@aforprint.io" style={{ width: '100%', fontSize: '12px' }} />
-                        </div>
-                        <div style={{ display: 'flex', gap: '20px' }}>
-                            <div style={{ flex: 1 }}>
-                                <label className="label" style={{ fontSize: '9px', marginBottom: '8px', display: 'block' }}>Max File Size (MB)</label>
-                                <input className="ink-input" defaultValue="50" type="number" style={{ width: '100%', fontSize: '12px' }} />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <label className="label" style={{ fontSize: '9px', marginBottom: '8px', display: 'block' }}>Default Currency</label>
-                                <select className="ink-input" style={{ width: '100%', fontSize: '12px' }}>
-                                    <option>INR (₹)</option>
-                                    <option>USD ($)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <button className="btn-signup" style={{ marginTop: '30px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                        <Save size={14} /> Seal Changes
-                    </button>
-                </section>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <section className="paper-sheet">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                            <Bell size={16} className="text-ink" />
-                            <h3 className="fraunces text-ink" style={{ fontSize: '1rem' }}>Notification Relay</h3>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px' }}>Order Confirmation Emails</span>
-                                <input type="checkbox" defaultChecked />
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px' }}>Vendor Payout Alerts</span>
-                                <input type="checkbox" defaultChecked />
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '11px' }}>Platform Maintenance SMS</span>
-                                <input type="checkbox" />
-                            </div>
-                        </div>
-                    </section>
-
-                    <section className="paper-sheet" style={{ borderLeft: '3px solid var(--wax-red)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                            <Lock size={16} style={{ color: 'var(--wax-red)' }} />
-                            <h3 className="fraunces" style={{ fontSize: '1rem', color: 'var(--wax-red)' }}>Access Control</h3>
-                        </div>
-                        <p style={{ fontSize: '10px', opacity: 0.6, marginBottom: '15px' }}>Restrict administrative access to specific IP ranges or domains.</p>
-                        <button className="btn-signin" style={{ width: '100%', fontSize: '10px' }}>Manage Whitelist</button>
-                    </section>
-
-                    <div className="paper-sheet" style={{ background: 'var(--ink-primary)', color: 'white', padding: '15px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                            <Database size={14} />
-                            <div className="label" style={{ fontSize: '8px', color: 'white' }}>System Health</div>
-                        </div>
-                        <div style={{ fontSize: '10px' }}>All scripts operating within nominal parameters. Archives are synchronized.</div>
-                    </div>
-                </div>
-            </div>
+      <section className="paper-sheet" style={{ padding: 14 }}>
+        <h3 className="fraunces text-ink" style={{ fontSize: "1.1rem", marginBottom: 10 }}>Environment Status</h3>
+        <div style={{ display: "grid", gap: 8, fontSize: 13 }}>
+          <div><strong>Admin allowlist count:</strong> {adminEmails.length}</div>
+          <div><strong>Razorpay:</strong> {hasRazorpay ? "Configured" : "Missing keys"}</div>
+          <div><strong>Supabase storage:</strong> {hasSupabaseStorage ? `Configured (bucket: ${storageBucket})` : "Missing storage credentials"}</div>
+          <div><strong>Commission model:</strong> 11% student fee + 11% vendor fee</div>
         </div>
-    );
+      </section>
+    </div>
+  );
 }

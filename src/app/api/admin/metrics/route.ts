@@ -10,6 +10,7 @@ export async function GET() {
 
   const [orderAgg, payoutAgg, userCounts] = await Promise.all([
     prisma.order.aggregate({
+      where: { status: { in: ["PAID", "ACCEPTED", "PRINTING", "READY", "COMPLETED"] } },
       _count: { _all: true },
       _sum: { platformRevenue: true, totalPaid: true },
     }),

@@ -9,7 +9,6 @@ import { requireActiveUser } from "@/lib/auth-helpers";
 
 const requestSchema = z.object({
   vendorId: z.string().uuid(),
-  baseAmount: z.number().positive(),
   pages: z.number().int().positive().optional(),
   printType: z.string().min(1).max(40).optional(),
   copies: z.number().int().positive().optional(),
@@ -19,7 +18,7 @@ const requestSchema = z.object({
   files: z
     .array(
       z.object({
-        fileUrl: z.string().url(),
+        fileUrl: z.string().min(1),
         fileName: z.string().min(1),
         fileSize: z.number().int().positive(),
       })
@@ -55,14 +54,45 @@ export async function POST(req: Request) {
 
   const vendor = await prisma.vendorProfile.findUnique({
     where: { id: parsed.data.vendorId },
-    select: { id: true },
+    select: {
+      id: true,
+      acceptingOrders: true,
+      pricePerPageBW: true,
+      pricePerPageColor: true,
+    },
   });
 
   if (!vendor) {
     return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
   }
 
-  const breakdown = calculateOrderBreakdown(parsed.data.baseAmount);
+  if (!vendor.acceptingOrders) {
+    return NextResponse.json({ error: "Selected vendor is not accepting orders" }, { status: 409 });
+  }
+
+  const pages = parsed.data.pages ?? 1;
+  const copies = parsed.data.copies ?? 1;
+  const printType = (parsed.data.printType || "BW").toUpperCase();
+  const ratePerPage = printType === "COLOR"
+    ? (vendor.pricePerPageColor ?? 8)
+    : (vendor.pricePerPageBW ?? 2);
+
+  const bindingFeeByType: Record<string, number> = {
+    "NO BINDING": 0,
+    "SPIRAL BINDING": 30,
+    "SOFT BINDING": 45,
+    "HARD BINDING": 80,
+    "STAPLE (TOP LEFT)": 5,
+    "CENTER PIN": 8,
+    "LAMINATION (FRONT ONLY)": 20,
+    "LAMINATION (BOTH SIDES)": 35,
+  };
+  const bindingLabel = (parsed.data.binding || "No Binding").toUpperCase();
+  const bindingFee = bindingFeeByType[bindingLabel] ?? 0;
+
+  const baseAmount = Number((pages * copies * ratePerPage + bindingFee).toFixed(2));
+
+  const breakdown = calculateOrderBreakdown(baseAmount);
 
   const order = await prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
@@ -71,9 +101,9 @@ export async function POST(req: Request) {
         vendorId: parsed.data.vendorId,
         status: "PAYMENT_PENDING",
         ...breakdown,
-        pages: parsed.data.pages ?? 1,
-        printType: parsed.data.printType,
-        copies: parsed.data.copies,
+        pages,
+        printType,
+        copies,
         binding: parsed.data.binding,
         deliveryType: parsed.data.deliveryType,
         deliveryAddress: parsed.data.deliveryAddress,

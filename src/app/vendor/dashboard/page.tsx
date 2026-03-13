@@ -14,14 +14,24 @@ type VendorOrder = {
 export default function VendorDashboard() {
     const [orders, setOrders] = useState<VendorOrder[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [acceptingOrders, setAcceptingOrders] = useState<boolean>(true);
+    const [toggleLoading, setToggleLoading] = useState(false);
+    const [toggleError, setToggleError] = useState("");
 
     useEffect(() => {
         const load = async () => {
             try {
-                const res = await fetch("/api/vendor/orders");
-                if (res.ok) {
-                    const data = await res.json();
+                const [ordersRes, settingsRes] = await Promise.all([
+                    fetch("/api/vendor/orders"),
+                    fetch("/api/vendor/settings"),
+                ]);
+                if (ordersRes.ok) {
+                    const data = await ordersRes.json();
                     setOrders(data.orders || []);
+                }
+                if (settingsRes.ok) {
+                    const data = await settingsRes.json();
+                    setAcceptingOrders(Boolean(data?.settings?.acceptingOrders));
                 }
             } finally {
                 setIsLoading(false);
@@ -48,6 +58,29 @@ export default function VendorDashboard() {
 
         return { ordersToday, pendingCount, readyCount, weekEarnings };
     }, [orders]);
+
+    const toggleService = async () => {
+        setToggleError("");
+        setToggleLoading(true);
+        try {
+            const next = !acceptingOrders;
+            const res = await fetch("/api/vendor/settings", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ acceptingOrders: next }),
+            });
+
+            if (!res.ok) {
+                const payload = await res.json().catch(() => ({}));
+                setToggleError(payload?.error || "Failed to update service status.");
+                return;
+            }
+
+            setAcceptingOrders(next);
+        } finally {
+            setToggleLoading(false);
+        }
+    };
 
     const statCards = [
         {
@@ -168,22 +201,36 @@ export default function VendorDashboard() {
 
             {/* ── QUICK ACTIONS ── */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                <div className="paper-sheet" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}>
+                <button
+                    className="paper-sheet"
+                    style={{
+                        padding: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px',
+                        cursor: toggleLoading ? 'wait' : 'pointer',
+                        textAlign: 'left',
+                        border: '1px solid rgba(62,32,40,0.1)'
+                    }}
+                    onClick={toggleService}
+                    disabled={toggleLoading}
+                >
                     <div style={{ fontSize: '24px', display: 'flex', alignItems: 'center' }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                         </svg>
                     </div>
                     <div>
-                        <div className="nav-text" style={{ fontSize: '14px', fontWeight: 700 }}>Service Status: Active</div>
-                        <div className="label" style={{ fontSize: '10px', opacity: 0.5 }}>Toggle shop visibility for students</div>
+                        <div className="nav-text" style={{ fontSize: '14px', fontWeight: 700 }}>Service Status: {acceptingOrders ? "ON" : "OFF"}</div>
+                        <div className="label" style={{ fontSize: '10px', opacity: 0.5 }}>Click to {acceptingOrders ? "disable" : "enable"} visibility for students</div>
+                        {toggleError ? <div style={{ color: 'var(--wax-red)', fontSize: '10px', marginTop: '4px' }}>{toggleError}</div> : null}
                     </div>
                     <div style={{ marginLeft: 'auto' }}>
-                        <div style={{ width: '40px', height: '20px', background: '#2d5a27', borderRadius: '10px', position: 'relative' }}>
-                            <div style={{ width: '16px', height: '16px', background: 'white', borderRadius: '50%', position: 'absolute', top: '2px', right: '2px' }}></div>
+                        <div style={{ width: '40px', height: '20px', background: acceptingOrders ? '#2d5a27' : '#9ca3af', borderRadius: '10px', position: 'relative' }}>
+                            <div style={{ width: '16px', height: '16px', background: 'white', borderRadius: '50%', position: 'absolute', top: '2px', right: acceptingOrders ? '2px' : '22px' }}></div>
                         </div>
                     </div>
-                </div>
+                </button>
                 <div className="paper-sheet" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}>
                     <div style={{ fontSize: '24px', display: 'flex', alignItems: 'center' }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>

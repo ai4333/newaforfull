@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+const RECEIVED_STATUSES = ["PAID", "ACCEPTED", "PRINTING", "READY", "COMPLETED"] as const;
+
 function card(label: string, value: string | number) {
   return (
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 14 }}>
@@ -34,7 +36,10 @@ export default async function AdminDashboardPage() {
     prisma.user.count(),
     prisma.vendorProfile.count(),
     prisma.vendorProfile.count({ where: { acceptingOrders: true } }),
-    prisma.order.aggregate({ _sum: { totalPaid: true } }),
+    prisma.order.aggregate({
+      where: { status: { in: [...RECEIVED_STATUSES] } },
+      _sum: { totalPaid: true },
+    }),
     prisma.user.groupBy({ by: ["role"], _count: { _all: true } }),
     prisma.vendorProfile.findMany({
       where: { acceptingOrders: false },
@@ -117,7 +122,9 @@ export default async function AdminDashboardPage() {
                     <td style={{ padding: "8px 6px", fontSize: 12 }}>{o.status}</td>
                     <td style={{ padding: "8px 6px", fontSize: 12 }}>{o.student.email}</td>
                     <td style={{ padding: "8px 6px", fontSize: 12 }}>{o.vendor.shopName}</td>
-                    <td style={{ padding: "8px 6px", fontSize: 12 }}>₹{Number(o.totalPaid ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "8px 6px", fontSize: 12 }}>
+                      ₹{RECEIVED_STATUSES.includes(o.status as (typeof RECEIVED_STATUSES)[number]) ? Number(o.totalPaid ?? 0).toFixed(2) : "0.00"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

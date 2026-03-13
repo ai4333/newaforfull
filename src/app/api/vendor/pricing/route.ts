@@ -64,14 +64,29 @@ export async function GET() {
     return NextResponse.json({ error: "Rate limiting unavailable" }, { status: 500 });
   }
 
-  const rows = await prisma.$queryRaw<Array<{ pricingConfig: unknown }>>`
-    SELECT "pricingConfig"
+  const rows = await prisma.$queryRaw<Array<{ pricingConfig: unknown; "pricePerPageBW": number | null; "pricePerPageColor": number | null }>>`
+    SELECT "pricingConfig", "pricePerPageBW", "pricePerPageColor"
     FROM "VendorProfile"
     WHERE "id" = ${vendor.profile.id}
     LIMIT 1
   `;
 
-  const pricing = rows[0]?.pricingConfig ?? null;
+  const row = rows[0];
+  let pricing = row?.pricingConfig ?? null;
+
+  if (!pricing) {
+    pricing = {
+      paperPrices: [
+        {
+          size: "A4",
+          bw: row?.pricePerPageBW ?? 2,
+          color: row?.pricePerPageColor ?? 8,
+        },
+      ],
+      gsmPrices: [],
+      finishingPrices: [],
+    };
+  }
 
   return NextResponse.json({ pricing });
 }

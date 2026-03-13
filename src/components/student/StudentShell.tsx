@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -12,6 +12,26 @@ type StudentShellProps = {
 
 export function StudentShell({ children, session }: StudentShellProps) {
   const pathname = usePathname();
+  const [profileName, setProfileName] = useState<string>(session?.user?.name || "");
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const res = await fetch("/api/student/profile", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const nextName = data?.profile?.name;
+        if (typeof nextName === "string" && nextName.trim()) {
+          setProfileName(nextName);
+        }
+      } catch {
+        // ignore fallback to session name
+      }
+    };
+
+    loadProfile();
+  }, []);
+
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/auth/login" });
   };
@@ -107,10 +127,8 @@ export function StudentShell({ children, session }: StudentShellProps) {
 
         <div className="sidebar-cell" style={{ borderTop: "1px solid rgba(62,32,40,0.08)", paddingTop: "16px" }}>
           <div className="ink-label" style={{ fontSize: "8px" }}>Active Campus</div>
-          <select className="ink-input" style={{ fontSize: "11px", padding: "6px 10px" }}>
-            <option>Main University Campus</option>
-            <option>East Engineering Wing</option>
-            <option>Medical College Block</option>
+          <select className="ink-input" style={{ fontSize: "11px", padding: "6px 10px" }} disabled>
+            <option>RV University</option>
           </select>
         </div>
       </aside>
@@ -135,7 +153,7 @@ export function StudentShell({ children, session }: StudentShellProps) {
 
             <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
               <div style={{ textAlign: "right" }}>
-                <div className="nav-text" style={{ fontSize: "11px", fontWeight: 700 }}>{session?.user?.name || "Loading..."}</div>
+                <div className="nav-text" style={{ fontSize: "11px", fontWeight: 700 }}>{profileName || session?.user?.name || "Student"}</div>
                 <div className="label" style={{ fontSize: "8px", opacity: 0.5 }}>{session?.user?.email}</div>
               </div>
               <div
@@ -144,7 +162,7 @@ export function StudentShell({ children, session }: StudentShellProps) {
                 onClick={handleLogout}
                 title="Logout"
               >
-                {session?.user?.name?.[0] || "U"}
+                {(profileName || session?.user?.name || "U")[0]}
               </div>
             </div>
           </header>

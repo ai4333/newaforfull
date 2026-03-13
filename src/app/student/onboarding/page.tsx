@@ -29,6 +29,7 @@ export default function StudentOnboardingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     const load = async () => {
@@ -67,6 +68,7 @@ export default function StudentOnboardingPage() {
   const onSave = async () => {
     setSaving(true);
     setError("");
+    setFieldErrors({});
     try {
       const res = await fetch("/api/student/profile", {
         method: "PATCH",
@@ -76,6 +78,9 @@ export default function StudentOnboardingPage() {
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         setError(payload?.error || "Unable to save profile");
+        if (payload?.details && typeof payload.details === "object") {
+          setFieldErrors(payload.details as Record<string, string[]>);
+        }
         return;
       }
       router.replace("/student/dashboard");
@@ -93,6 +98,13 @@ export default function StudentOnboardingPage() {
       <h2 className="fraunces text-ink" style={{ fontSize: "1.6rem", marginBottom: "8px" }}>Student Onboarding</h2>
       <p className="lora italic" style={{ opacity: 0.7, marginBottom: "16px" }}>Complete your profile to start placing print orders.</p>
       {error ? <div style={{ color: "var(--wax-red)", marginBottom: "12px", fontSize: "12px" }}>{error}</div> : null}
+      {Object.keys(fieldErrors).length > 0 ? (
+        <div style={{ color: "var(--wax-red)", marginBottom: "12px", fontSize: "12px" }}>
+          {Object.entries(fieldErrors).map(([field, messages]) => (
+            <div key={field}>{field}: {messages.join(", ")}</div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="admin-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
         <input className="ink-input" placeholder="Full Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />

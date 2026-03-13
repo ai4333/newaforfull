@@ -143,6 +143,8 @@ export function AdminOrdersClient() {
     }
   };
 
+  const isReceivedOrderStatus = (status: string) => ["PAID", "ACCEPTED", "PRINTING", "READY", "COMPLETED"].includes(status);
+
   return (
     <div className="reveal-up active">
       <header className="admin-header" style={{ marginBottom: '2.5rem' }}>
@@ -277,8 +279,8 @@ export function AdminOrdersClient() {
                 <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--wax-red)' }}>{selectedOrder.status}</div>
               </div>
               <div>
-                <div className="label" style={{ fontSize: '8px', opacity: 0.5 }}>Value Settled</div>
-                <div style={{ fontSize: '10px', fontWeight: 800 }}>₹{selectedOrder.totalPaid.toFixed(2)}</div>
+                <div className="label" style={{ fontSize: '8px', opacity: 0.5 }}>Money Received</div>
+                <div style={{ fontSize: '10px', fontWeight: 800 }}>₹{isReceivedOrderStatus(selectedOrder.status) ? selectedOrder.totalPaid.toFixed(2) : "0.00"}</div>
               </div>
             </div>
           </section>

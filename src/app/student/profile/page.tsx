@@ -1,65 +1,127 @@
 "use client";
-import React from 'react';
+
+import { useEffect, useState } from "react";
+import { signOut } from "next-auth/react";
+
+type Profile = {
+  name: string;
+  phone: string;
+  college: string;
+  university: string;
+  course: string;
+  year: string;
+  defaultDeliveryAddress: string;
+};
+
+const emptyProfile: Profile = {
+  name: "",
+  phone: "",
+  college: "",
+  university: "",
+  course: "",
+  year: "",
+  defaultDeliveryAddress: "",
+};
 
 export default function ProfilePage() {
-    const handleLogout = () => {
-        localStorage.removeItem('userRole');
-        localStorage.removeItem('isLoggedIn');
-        window.location.href = '/auth/login';
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [profile, setProfile] = useState<Profile>(emptyProfile);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await fetch("/api/student/profile", { cache: "no-store" });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}));
+          setError(payload?.error || "Failed to load profile");
+          return;
+        }
+
+        const data = await res.json();
+        const p = data?.profile || {};
+        setProfile({
+          name: p.name || "",
+          phone: p.phone || "",
+          college: p.college || "",
+          university: p.university || "",
+          course: p.course || "",
+          year: p.year || "",
+          defaultDeliveryAddress: p.defaultDeliveryAddress || "",
+        });
+      } finally {
+        setLoading(false);
+      }
     };
 
-    return (
-        <div className="dash-container">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '32px', alignItems: 'start' }}>
-                {/* ── PROFILE INFO ── */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div className="paper-sheet" style={{ textAlign: 'center', padding: '32px 20px' }}>
-                        <div className="founder-monogram" style={{ width: '80px', height: '80px', fontSize: '32px', margin: '0 auto 16px' }}>N</div>
-                        <h3 className="fraunces text-ink" style={{ fontSize: '1.25rem', fontWeight: 700 }}>Nikhil Sridhara</h3>
-                        <div className="label" style={{ fontSize: '9px', opacity: 0.5 }}>Member since 2024</div>
-                        <button onClick={handleLogout} className="btn-signin" style={{ marginTop: '24px', width: '100%', color: 'var(--wax-red)', borderColor: 'rgba(139,30,43,0.15)', fontSize: '10px' }}>Logout Account</button>
-                    </div>
-                </div>
+    load();
+  }, []);
 
-                {/* ── SETTINGS ── */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <section className="paper-sheet">
-                        <h4 className="fraunces text-ink mb-6" style={{ fontSize: '1rem', fontWeight: 700 }}>Personal Credentials</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                            <div style={{ gridColumn: 'span 1' }}>
-                                <label className="ink-label">Full Name</label>
-                                <input type="text" className="ink-input" defaultValue="Nikhil Sridhara" />
-                            </div>
-                            <div style={{ gridColumn: 'span 1' }}>
-                                <label className="ink-label">Phone Number</label>
-                                <input type="tel" className="ink-input" defaultValue="+91 98765 43210" />
-                            </div>
-                            <div style={{ gridColumn: 'span 2' }}>
-                                <label className="ink-label">Email Address</label>
-                                <input type="email" className="ink-input" defaultValue="nikhil.s@university.edu" disabled style={{ opacity: 0.5, background: 'rgba(62,32,40,0.05)' }} />
-                            </div>
-                        </div>
-                    </section>
+  const save = async () => {
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch("/api/student/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile),
+      });
 
-                    <section className="paper-sheet">
-                        <h4 className="fraunces text-ink mb-6" style={{ fontSize: '1rem', fontWeight: 700 }}>Printing Preferences</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                            <div>
-                                <label className="ink-label">Default Size</label>
-                                <select className="ink-input"><option>A4</option><option>Legal</option></select>
-                            </div>
-                            <div>
-                                <label className="ink-label">Color Mode</label>
-                                <select className="ink-input"><option>B&W</option><option>Color</option></select>
-                            </div>
-                        </div>
-                    </section>
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        const detailText = payload?.details
+          ? Object.entries(payload.details)
+              .map(([field, msgs]) => `${field}: ${(msgs as string[]).join(", ")}`)
+              .join(" | ")
+          : "";
+        setError(payload?.error ? `${payload.error}${detailText ? ` - ${detailText}` : ""}` : "Failed to update profile");
+        return;
+      }
 
-                    <div className="text-right">
-                        <button className="btn-signup" style={{ padding: '8px 32px' }}>Update Profile</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
+      setSuccess("Profile updated successfully.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="paper-sheet">Loading profile...</div>;
+  }
+
+  return (
+    <div className="paper-sheet" style={{ maxWidth: 900 }}>
+      <h2 className="fraunces text-ink" style={{ fontSize: "1.6rem", marginBottom: 8 }}>Student Profile</h2>
+      <p className="lora italic" style={{ opacity: 0.7, marginBottom: 14 }}>Your real profile data is shown and saved here.</p>
+
+      {error ? <div style={{ color: "var(--wax-red)", marginBottom: 10, fontSize: 12 }}>{error}</div> : null}
+      {success ? <div style={{ color: "#166534", marginBottom: 10, fontSize: 12 }}>{success}</div> : null}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <input className="ink-input" placeholder="Full Name" value={profile.name} onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} />
+        <input className="ink-input" placeholder="Phone" value={profile.phone} onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))} />
+        <input className="ink-input" placeholder="College" value={profile.college} onChange={(e) => setProfile((p) => ({ ...p, college: e.target.value }))} />
+        <input className="ink-input" placeholder="University" value={profile.university} onChange={(e) => setProfile((p) => ({ ...p, university: e.target.value }))} />
+        <input className="ink-input" placeholder="Course" value={profile.course} onChange={(e) => setProfile((p) => ({ ...p, course: e.target.value }))} />
+        <input className="ink-input" placeholder="Year" value={profile.year} onChange={(e) => setProfile((p) => ({ ...p, year: e.target.value }))} />
+        <textarea
+          className="ink-input"
+          placeholder="Default Delivery Address"
+          rows={3}
+          value={profile.defaultDeliveryAddress}
+          onChange={(e) => setProfile((p) => ({ ...p, defaultDeliveryAddress: e.target.value }))}
+          style={{ gridColumn: "1 / span 2" }}
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+        <button className="btn-signup" onClick={save} disabled={saving}>{saving ? "Saving..." : "Update Profile"}</button>
+        <button className="btn-signin" onClick={() => signOut({ callbackUrl: "/auth/login" })}>Logout</button>
+      </div>
+    </div>
+  );
 }

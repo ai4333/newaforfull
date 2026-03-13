@@ -18,6 +18,9 @@ const allowedMimeTypes = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/zip",
   "application/x-zip-compressed",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
 ]);
 
 export async function POST(req: Request) {
@@ -43,7 +46,13 @@ export async function POST(req: Request) {
   }
 
   if (!allowedMimeTypes.has(parsed.data.mimeType)) {
-    return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: `Unsupported file type: ${parsed.data.mimeType}`,
+        supportedTypes: Array.from(allowedMimeTypes),
+      },
+      { status: 400 }
+    );
   }
 
   const supabase = getSupabaseServerClient();

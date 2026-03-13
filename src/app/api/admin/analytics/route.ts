@@ -22,6 +22,7 @@ export async function GET() {
              COALESCE(SUM("totalPaid"), 0)::float8 AS revenue
       FROM "Order"
       WHERE "createdAt" >= now() - interval '30 days'
+        AND "status" IN ('PAID', 'ACCEPTED', 'PRINTING', 'READY', 'COMPLETED')
       GROUP BY 1
       ORDER BY 1 ASC
     `,

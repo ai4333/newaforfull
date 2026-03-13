@@ -51,7 +51,7 @@ function AdminLoginInner() {
         <button
           className="btn-signup"
           style={{ width: "100%", justifyContent: "center", padding: "14px", fontSize: "13px", cursor: "pointer" }}
-          onClick={() => signIn("google", { callbackUrl: nextUrl })}
+          onClick={() => signIn("google", { callbackUrl: nextUrl, prompt: "select_account" })}
         >
           Continue with Google
         </button>

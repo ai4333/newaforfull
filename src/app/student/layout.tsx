@@ -6,7 +6,19 @@ export default async function StudentLayout({ children }: { children: React.Reac
     const session = await auth();
     const role = (session?.user as { role?: string } | undefined)?.role;
 
-    if (!session?.user || role !== "STUDENT") {
+    if (!session?.user) {
+        redirect("/auth/login");
+    }
+
+    if (role === "VENDOR") {
+        redirect("/vendor/dashboard");
+    }
+
+    if (role === "ADMIN") {
+        redirect("/admin/dashboard");
+    }
+
+    if (role !== "STUDENT") {
         redirect("/auth/login");
     }
 
