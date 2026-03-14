@@ -13,6 +13,24 @@ type StudentShellProps = {
 export function StudentShell({ children, session }: StudentShellProps) {
   const pathname = usePathname();
   const [profileName, setProfileName] = useState<string>(session?.user?.name || "");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Close menu on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -91,16 +109,28 @@ export function StudentShell({ children, session }: StudentShellProps) {
   ];
 
   return (
-    <div className="dash-layout">
-      <aside className="dash-sidebar">
+    <div className="dash-layout relative">
+      <div
+        className={`drawer-overlay ${isMobileMenuOpen ? 'open' : ''}`}
+        onClick={() => setIsMobileMenuOpen(false)}
+      />
+
+      <aside className={`dash-sidebar ${isMobileMenuOpen ? 'drawer-open' : ''}`}>
         <div style={{ paddingBottom: "20px", borderBottom: "1px solid rgba(139,30,43,0.08)" }}>
-          <h1 className="fraunces text-ink" style={{ fontSize: "1.25rem", fontWeight: 900, letterSpacing: "0.05em" }}>
+          <h1 className="fraunces text-ink flex justify-between items-center" style={{ fontSize: "1.25rem", fontWeight: 900, letterSpacing: "0.05em" }}>
             AforPrint
+            <button
+              className="md:hidden"
+              onClick={() => setIsMobileMenuOpen(false)}
+              style={{ background: 'none', border: 'none', color: 'var(--ink-primary)', padding: '4px' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
           </h1>
           <span className="label" style={{ fontSize: "8px", opacity: 0.5, letterSpacing: "0.1em" }}>STUDENT PORTAL</span>
         </div>
 
-        <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+        <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px", marginTop: "16px" }}>
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -133,45 +163,71 @@ export function StudentShell({ children, session }: StudentShellProps) {
         </div>
       </aside>
 
-      <main className="dash-content">
-        <div className="dash-container">
-          <header
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "32px",
-              paddingBottom: "12px",
-              borderBottom: "1px solid rgba(62,32,40,0.05)",
-            }}
-          >
-            <div>
-              <h2 className="fraunces text-ink" style={{ fontSize: "1rem", fontWeight: 700, opacity: 0.8 }}>
-                {navItems.find((i) => i.href === pathname)?.name || "Dashboard"}
-              </h2>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, width: '100%', overflow: 'hidden' }}>
+        {/* Mobile Header elements only show on standard mobile via CSS media query class */}
+        <header className="mobile-header">
+          <h1 className="fraunces text-ink" style={{ fontSize: "1.2rem", fontWeight: 900, letterSpacing: "0.05em", margin: 0 }}>
+            AforPrint
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div
+              className="founder-monogram"
+              style={{ width: "28px", height: "28px", fontSize: "10px", margin: 0, cursor: "pointer" }}
+              onClick={handleLogout}
+              title="Logout"
+            >
+              {(profileName || session?.user?.name || "S")[0]}
             </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-              <div style={{ textAlign: "right" }}>
-                <div className="nav-text" style={{ fontSize: "11px", fontWeight: 700 }}>{profileName || session?.user?.name || "Student"}</div>
-                <div className="label" style={{ fontSize: "8px", opacity: 0.5 }}>{session?.user?.email}</div>
-              </div>
-              <div
-                className="founder-monogram"
-                style={{ width: "32px", height: "32px", fontSize: "12px", cursor: "pointer" }}
-                onClick={handleLogout}
-                title="Logout"
-              >
-                {(profileName || session?.user?.name || "U")[0]}
-              </div>
-            </div>
-          </header>
-
-          <div className="reveal-up active" style={{ flex: 1 }}>
-            {children}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              style={{ background: 'transparent', border: 'none', color: 'var(--ink-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
           </div>
-        </div>
-      </main>
+        </header>
+
+        <main className="dash-content">
+          <div className="dash-container">
+            <header
+              className="hidden md:flex"
+              style={{
+                display: "flex", // Keep this for desktop, hidden on mobile via tailwind above
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "32px",
+                paddingBottom: "12px",
+                borderBottom: "1px solid rgba(62,32,40,0.05)",
+              }}
+            >
+              <div>
+                <h2 className="fraunces text-ink" style={{ fontSize: "1rem", fontWeight: 700, opacity: 0.8 }}>
+                  {navItems.find((i) => i.href === pathname)?.name || "Dashboard"}
+                </h2>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div style={{ textAlign: "right" }}>
+                  <div className="nav-text" style={{ fontSize: "11px", fontWeight: 700 }}>{profileName || session?.user?.name || "Student"}</div>
+                  <div className="label" style={{ fontSize: "8px", opacity: 0.5 }}>{session?.user?.email}</div>
+                </div>
+                <div
+                  className="founder-monogram"
+                  style={{ width: "32px", height: "32px", fontSize: "12px", cursor: "pointer", margin: 0 }}
+                  onClick={handleLogout}
+                  title="Logout"
+                >
+                  {(profileName || session?.user?.name || "U")[0]}
+                </div>
+              </div>
+            </header>
+
+            <div className="reveal-up active" style={{ flex: 1 }}>
+              {children}
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

@@ -350,7 +350,7 @@ export default function NewOrderPage() {
                 ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '24px', alignItems: 'start' }}>
+            <div className="responsive-grid-2-sidebar">
                 <div className="paper-sheet" style={{ minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
                     <div className="paper-fold"></div>
 
@@ -398,7 +398,7 @@ export default function NewOrderPage() {
                         {step === 2 && (
                             <div className="reveal-up active">
                                 <h3 className="fraunces text-ink mb-6" style={{ fontSize: '1.25rem' }}>Paper Settings</h3>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                <div className="responsive-grid-2">
                                     <div>
                                         <label className="ink-label">Paper Size</label>
                                         <select className="ink-input" value={order.paperSize} onChange={(e) => setOrder({ ...order, paperSize: e.target.value })}>

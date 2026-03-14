@@ -62,7 +62,7 @@ export default function StudentDashboard() {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
             {/* ── REFINED WELCOME & QUICK ACTIONS ── */}
-            <section style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "40px" }}>
+            <section className="flex flex-col md:flex-row md:justify-between md:items-end gap-6 md:gap-10">
                 <div style={{ flex: 1 }}>
                     <h1 className="fraunces text-ink" style={{ fontSize: "2rem", marginBottom: "4px" }}>Welcome Back</h1>
                     <p className="lora" style={{ fontStyle: "italic", fontSize: "13px", opacity: 0.6 }}>
@@ -75,14 +75,14 @@ export default function StudentDashboard() {
                     ) : null}
                 </div>
 
-                <div style={{ display: "flex", gap: "12px" }}>
-                    <Link href="/student/new-order" className="btn-signup">Create New Order</Link>
-                    <Link href="/student/orders" className="btn-signin">Order History</Link>
+                <div style={{ display: "flex", gap: "12px", width: "100%" }} className="md:w-auto">
+                    <Link href="/student/new-order" className="btn-signup text-center" style={{ flex: 1 }}>Create New Order</Link>
+                    <Link href="/student/orders" className="btn-signin text-center" style={{ flex: 1 }}>Order History</Link>
                 </div>
             </section>
 
             {/* ── QUICK STATS ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px" }}>
+            <div className="responsive-grid-3">
                 <div className="paper-sheet" style={{ padding: "20px" }}>
                     <div className="ink-label">Active Orders</div>
                     <div className="fraunces text-ink" style={{ fontSize: "1.75rem", fontWeight: 900 }}>{stats.activeCount}</div>

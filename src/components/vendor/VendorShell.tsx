@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -13,6 +13,24 @@ type VendorShellProps = {
 
 export function VendorShell({ children, session, shopName }: VendorShellProps) {
   const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Close menu on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [isMobileMenuOpen]);
 
   const navItems = [
     {
@@ -95,13 +113,27 @@ export function VendorShell({ children, session, shopName }: VendorShellProps) {
   };
 
   return (
-    <div className="dash-layout">
-      <aside className="dash-sidebar">
-        <div className="mb-10 px-2">
-          <h1 className="fraunces text-ink" style={{ fontSize: "1.4rem", fontWeight: 900, letterSpacing: "-0.02em" }}>
-            AforPrint
-          </h1>
-          <div className="label mt-1" style={{ fontSize: "8px", opacity: 0.5, letterSpacing: "0.1em" }}>VENDOR CONSOLE</div>
+    <div className="dash-layout relative">
+      <div
+        className={`drawer-overlay ${isMobileMenuOpen ? 'open' : ''}`}
+        onClick={() => setIsMobileMenuOpen(false)}
+      />
+
+      <aside className={`dash-sidebar ${isMobileMenuOpen ? 'drawer-open' : ''} z-50`}>
+        <div className="mb-10 px-2 flex justify-between items-center w-full">
+          <div>
+            <h1 className="fraunces text-ink" style={{ fontSize: "1.4rem", fontWeight: 900, letterSpacing: "-0.02em" }}>
+              AforPrint
+            </h1>
+            <div className="label mt-1" style={{ fontSize: "8px", opacity: 0.5, letterSpacing: "0.1em" }}>VENDOR CONSOLE</div>
+          </div>
+          <button
+            className="md:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+            style={{ background: 'none', border: 'none', color: 'var(--ink-primary)', padding: '4px' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
         </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -143,48 +175,75 @@ export function VendorShell({ children, session, shopName }: VendorShellProps) {
         </div>
       </aside>
 
-      <main className="dash-content">
-        <header
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "16px 0",
-            marginBottom: "32px",
-            borderBottom: "1px solid rgba(62,32,40,0.05)",
-          }}
-        >
-          <div>
-            <h2 className="fraunces text-ink" style={{ fontSize: "1.2rem", fontWeight: 700 }}>{shopName}</h2>
-            <p className="lora italic opacity-50" style={{ fontSize: "11px" }}>ID: V-882-HUB</p>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <div style={{ textAlign: "right" }}>
-              <div className="nav-text" style={{ fontSize: "12px", fontWeight: 700 }}>{session?.user?.name || "Loading..."}</div>
-              <div className="label" style={{ fontSize: "9px", opacity: 0.5 }}>{session?.user?.email}</div>
-            </div>
-            <button
-              onClick={handleLogout}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, width: '100%', overflow: 'hidden' }}>
+        {/* Mobile Header elements only show on standard mobile via CSS media query class */}
+        <header className="mobile-header">
+          <h1 className="fraunces text-ink" style={{ fontSize: "1.2rem", fontWeight: 900, letterSpacing: "0.05em", margin: 0 }}>
+            {shopName}
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div
               className="founder-monogram"
-              style={{
-                width: "36px",
-                height: "36px",
-                fontSize: "14px",
-                cursor: "pointer",
-                transition: "transform 0.2s ease",
-              }}
+              style={{ width: "28px", height: "28px", fontSize: "10px", margin: 0, cursor: "pointer" }}
+              onClick={handleLogout}
               title="Logout"
             >
-              {session?.user?.name?.[0] || "V"}
+              {(session?.user?.name || "V")[0]}
+            </div>
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              style={{ background: 'transparent', border: 'none', color: 'var(--ink-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             </button>
           </div>
         </header>
 
-        <div className="dash-container">{children}</div>
-      </main>
+        <main className="dash-content">
+          <header
+            className="hidden md:flex"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "16px 0",
+              marginBottom: "32px",
+              borderBottom: "1px solid rgba(62,32,40,0.05)",
+            }}
+          >
+            <div>
+              <h2 className="fraunces text-ink" style={{ fontSize: "1.2rem", fontWeight: 700 }}>{shopName}</h2>
+              <p className="lora italic opacity-50" style={{ fontSize: "11px" }}>ID: V-882-HUB</p>
+            </div>
 
-      <div className="fixed bottom-4 left-4 z-50 pointer-events-none">
+            <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+              <div style={{ textAlign: "right" }}>
+                <div className="nav-text" style={{ fontSize: "12px", fontWeight: 700 }}>{session?.user?.name || "Loading..."}</div>
+                <div className="label" style={{ fontSize: "9px", opacity: 0.5 }}>{session?.user?.email}</div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="founder-monogram"
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  transition: "transform 0.2s ease",
+                  margin: 0
+                }}
+                title="Logout"
+              >
+                {session?.user?.name?.[0] || "V"}
+              </button>
+            </div>
+          </header>
+
+          <div className="dash-container">{children}</div>
+        </main>
+      </div>
+
+      <div className="fixed bottom-4 left-4 z-50 pointer-events-none hidden md:block">
         <div className="paper-sheet" style={{ padding: "4px 8px", borderRadius: "4px", opacity: 0.3 }}>
           <span className="label" style={{ fontSize: "8px" }}>v.1.0.4-vendor</span>
         </div>
@@ -192,3 +251,4 @@ export function VendorShell({ children, session, shopName }: VendorShellProps) {
     </div>
   );
 }
+

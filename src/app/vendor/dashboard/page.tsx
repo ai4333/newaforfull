@@ -133,7 +133,7 @@ export default function VendorDashboard() {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
             {/* ── STATS GRID ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "20px" }}>
+            <div className="responsive-grid-4">
                 {statCards.map((stat, i) => (
                     <div key={i} className="paper-sheet" style={{ padding: "20px", position: "relative", overflow: "hidden" }}>
                         <div style={{ fontSize: "20px", marginBottom: "12px" }}>{stat.icon}</div>
@@ -200,7 +200,7 @@ export default function VendorDashboard() {
             </section>
 
             {/* ── QUICK ACTIONS ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div className="responsive-grid-2">
                 <button
                     className="paper-sheet"
                     style={{
