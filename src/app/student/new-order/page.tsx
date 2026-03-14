@@ -3,7 +3,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { PDFDocument } from 'pdf-lib';
 
 type Vendor = {
     id: string;
@@ -112,25 +111,8 @@ export default function NewOrderPage() {
             return;
         }
 
-        setOrder(prev => ({ ...prev, file }));
-
-        if (file.type === 'application/pdf') {
-            setIsDetectingPages(true);
-            try {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
-                const pageCount = pdfDoc.getPageCount();
-                setOrder(prev => ({ ...prev, pages: Math.max(pageCount, 1) }));
-            } catch (err) {
-                console.error("PDF Parsing Error:", err);
-                // Fallback to 1 page if detection fails
-                setOrder(prev => ({ ...prev, pages: 1 }));
-            } finally {
-                setIsDetectingPages(false);
-            }
-        } else {
-            setOrder(prev => ({ ...prev, pages: 1 }));
-        }
+        setOrder(prev => ({ ...prev, file, pages: 1 }));
+        setIsDetectingPages(false);
     };
 
     const estimatedBasePrice = useMemo(() => {
@@ -194,6 +176,7 @@ export default function NewOrderPage() {
 
         setIsSubmitting(true);
         try {
+            let pagesForOrder = order.pages;
             let uploadedFileMeta:
                 | {
                     fileUrl: string;
@@ -224,8 +207,11 @@ export default function NewOrderPage() {
                     pageCount: number;
                 };
 
-                if (uploadInfo.pageCount > 0 && uploadInfo.pageCount !== order.pages) {
-                    setOrder(prev => ({ ...prev, pages: uploadInfo.pageCount }));
+                if (uploadInfo.pageCount > 0) {
+                    pagesForOrder = uploadInfo.pageCount;
+                    if (uploadInfo.pageCount !== order.pages) {
+                        setOrder(prev => ({ ...prev, pages: uploadInfo.pageCount }));
+                    }
                 }
 
                 uploadedFileMeta = {
@@ -240,7 +226,7 @@ export default function NewOrderPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     vendorId: selectedVendorId,
-                    pages: order.pages,
+                    pages: pagesForOrder,
                     printType: order.colorMode === "Color" ? "COLOR" : "BW",
                     copies: order.copies,
                     binding: order.binding,
@@ -268,7 +254,8 @@ export default function NewOrderPage() {
 
             if (!paymentRes.ok) {
                 const payload = await paymentRes.json().catch(() => ({}));
-                setError(payload?.error || 'Failed to create payment order.');
+                const reason = payload?.reason ? ` (${payload.reason})` : '';
+                setError(payload?.error ? `${payload.error}${reason}` : 'Failed to create payment order.');
                 return;
             }
 
@@ -401,19 +388,8 @@ export default function NewOrderPage() {
                                             {order.pages} pages detected
                                         </div>
                                     )}
-                                    <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center' }}>
-                                        <label className="label" style={{ fontSize: '9px' }}>Pages</label>
-                                        <input
-                                            type="number"
-                                            min={1}
-                                            className="ink-input"
-                                            style={{ width: '90px', textAlign: 'center', padding: '6px 8px' }}
-                                            value={order.pages}
-                                            onChange={(ev) => setOrder(prev => ({ ...prev, pages: Math.max(1, Number(ev.target.value) || 1) }))}
-                                        />
-                                    </div>
                                     <div className="label" style={{ fontSize: '9px', opacity: 0.4 }}>PDF, DOC, DOCX, ZIP, PNG, JPG (MAX 20MB)</div>
-                                    <div className="label" style={{ fontSize: '8px', opacity: 0.5 }}>PDF pages are auto-detected. For other files, adjust pages manually.</div>
+                                    <div className="label" style={{ fontSize: '8px', opacity: 0.5 }}>Pages are auto-detected from uploaded file type.</div>
                                 </div>
                             </div>
                         )}

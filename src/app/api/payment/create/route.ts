@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
 import { requireActiveUser } from "@/lib/auth-helpers";
+import Razorpay from "razorpay";
 
 const requestSchema = z.object({
   orderId: z.string().uuid(),
@@ -61,33 +62,46 @@ export async function POST(req: Request) {
   }
 
   const amount = Math.round(order.totalPaid * 100);
-  const response = await fetch("https://api.razorpay.com/v1/orders", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
-    },
-    body: JSON.stringify({
+  if (amount < 100) {
+    return NextResponse.json({ error: "Order amount must be at least ₹1.00" }, { status: 400 });
+  }
+
+  const receipt = `ord_${order.id.replace(/-/g, "").slice(0, 30)}`;
+
+  const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
+
+  let data: { id: string };
+  try {
+    const created = await razorpay.orders.create({
       amount,
       currency: "INR",
-      receipt: `order_${order.id}`,
-      payment_capture: 1,
-    }),
-  });
+      receipt,
+    });
+    data = { id: created.id };
+  } catch (error) {
+    const providerMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" && error && "description" in error
+          ? String((error as { description?: string }).description)
+          : "Razorpay rejected the order create request";
 
-  if (!response.ok) {
-    const errorText = await response.text();
     await prisma.activityLog.create({
       data: {
         userId,
         action: "PAYMENT_CREATE_FAILED",
-        details: errorText.slice(0, 500),
+        details: providerMessage.slice(0, 500),
       },
     });
-    return NextResponse.json({ error: "Razorpay order creation failed" }, { status: 502 });
-  }
 
-  const data = (await response.json()) as { id: string };
+    return NextResponse.json(
+      {
+        error: "Razorpay order creation failed",
+        reason: providerMessage,
+      },
+      { status: 502 }
+    );
+  }
 
   await prisma.$transaction([
     prisma.order.update({
