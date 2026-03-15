@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
 import { requireActiveUser } from "@/lib/auth-helpers";
+import { getDefaultVendorPricingConfig } from "@/lib/vendor-defaults";
 
 const readLimiter = createRateLimiter(80, "1 m");
 const writeLimiter = createRateLimiter(30, "1 m");
@@ -12,12 +13,8 @@ const onboardingSchema = z.object({
   phone: z.string().min(8).max(20),
   shopName: z.string().min(2).max(150),
   shopAddress: z.string().min(5).max(300),
-  openingTime: z.string().min(3).max(20),
-  closingTime: z.string().min(3).max(20),
-  servicesAvailable: z.array(z.string().min(2)).min(1),
-  pricePerPageBW: z.number().nonnegative(),
-  pricePerPageColor: z.number().nonnegative(),
-  upiId: z.string().min(3).max(120),
+  mapLocation: z.string().max(300).optional(),
+  verificationId: z.string().min(4).max(120),
 });
 
 function hasCompletedOnboarding(profile: {
@@ -25,25 +22,22 @@ function hasCompletedOnboarding(profile: {
   contactNumber: string | null;
   shopName: string;
   shopAddress: string | null;
-  openingTime: string | null;
-  closingTime: string | null;
+  mapLocation: string | null;
+  businessHours: unknown;
   servicesAvailable: unknown;
   pricePerPageBW: number | null;
   pricePerPageColor: number | null;
   upiId: string | null;
+  openingTime: string | null;
+  closingTime: string | null;
+  verificationId: string | null;
 }) {
   return Boolean(
     profile.ownerName &&
       profile.contactNumber &&
       profile.shopName &&
       profile.shopAddress &&
-      profile.openingTime &&
-      profile.closingTime &&
-      Array.isArray(profile.servicesAvailable) &&
-      profile.servicesAvailable.length > 0 &&
-      profile.pricePerPageBW !== null &&
-      profile.pricePerPageColor !== null &&
-      profile.upiId
+      profile.verificationId
   );
 }
 
@@ -70,6 +64,9 @@ export async function GET() {
       shopName: authResult.user.name ? `${authResult.user.name} Print Shop` : "Campus Print Vendor",
       approvalStatus: "PENDING_APPROVAL",
       acceptingOrders: false,
+      pricePerPageBW: 2,
+      pricePerPageColor: 8,
+      pricingConfig: getDefaultVendorPricingConfig(),
     },
     select: {
       id: true,
@@ -77,12 +74,15 @@ export async function GET() {
       contactNumber: true,
       shopName: true,
       shopAddress: true,
+      mapLocation: true,
       openingTime: true,
       closingTime: true,
+      businessHours: true,
       servicesAvailable: true,
       pricePerPageBW: true,
       pricePerPageColor: true,
       upiId: true,
+      verificationId: true,
       approvalStatus: true,
     },
   });
@@ -127,12 +127,13 @@ export async function PATCH(req: Request) {
         contactNumber: parsed.data.phone,
         shopName: parsed.data.shopName,
         shopAddress: parsed.data.shopAddress,
-        openingTime: parsed.data.openingTime,
-        closingTime: parsed.data.closingTime,
-        servicesAvailable: parsed.data.servicesAvailable,
-        pricePerPageBW: parsed.data.pricePerPageBW,
-        pricePerPageColor: parsed.data.pricePerPageColor,
-        upiId: parsed.data.upiId,
+        mapLocation: parsed.data.mapLocation,
+        verificationId: parsed.data.verificationId,
+        businessHours: [{ label: "Daily", open: "09:00", close: "18:00" }],
+        servicesAvailable: ["A4 BW", "A4 Color", "A3 BW", "A3 Color"],
+        pricePerPageBW: 2,
+        pricePerPageColor: 8,
+        pricingConfig: getDefaultVendorPricingConfig(),
         approvalStatus: "PENDING_APPROVAL",
         acceptingOrders: false,
       },
@@ -142,12 +143,13 @@ export async function PATCH(req: Request) {
         contactNumber: parsed.data.phone,
         shopName: parsed.data.shopName,
         shopAddress: parsed.data.shopAddress,
-        openingTime: parsed.data.openingTime,
-        closingTime: parsed.data.closingTime,
-        servicesAvailable: parsed.data.servicesAvailable,
-        pricePerPageBW: parsed.data.pricePerPageBW,
-        pricePerPageColor: parsed.data.pricePerPageColor,
-        upiId: parsed.data.upiId,
+        mapLocation: parsed.data.mapLocation,
+        verificationId: parsed.data.verificationId,
+        businessHours: [{ label: "Daily", open: "09:00", close: "18:00" }],
+        servicesAvailable: ["A4 BW", "A4 Color", "A3 BW", "A3 Color"],
+        pricePerPageBW: 2,
+        pricePerPageColor: 8,
+        pricingConfig: getDefaultVendorPricingConfig(),
         approvalStatus: "PENDING_APPROVAL",
         acceptingOrders: false,
       },

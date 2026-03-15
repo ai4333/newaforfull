@@ -6,7 +6,7 @@ type VendorOrder = {
   status: string;
   createdAt: string;
   student: { name: string | null; email: string } | null;
-  files: { fileName: string; fileUrl: string }[];
+  files: { fileName: string; fileUrl: string; pages?: number; copies?: number; printType?: string | null; paperType?: string | null; binding?: string | null; duplex?: boolean }[];
 };
 
 const statusFlow: Record<string, string[]> = {
@@ -27,6 +27,7 @@ export default function VendorOrdersPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
 
   const loadOrders = useCallback(async () => {
     setIsLoading(true);
@@ -46,7 +47,40 @@ export default function VendorOrdersPage() {
     loadOrders();
   }, [loadOrders]);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      loadOrders();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [loadOrders]);
+
+  useEffect(() => {
+    const hasPendingPaid = orders.some((o) => o.status === "PAID");
+    if (!hasPendingPaid) return;
+
+    const ctx = audioContext || new AudioContext();
+    if (!audioContext) setAudioContext(ctx);
+
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.02;
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.15);
+  }, [orders, audioContext]);
+
   const updateStatus = async (orderId: string, status: string) => {
+    if (status === "ACCEPTED") {
+      if (!window.confirm("Are you sure you want to ACCEPT this order?")) return;
+    }
+
+    if (status === "REJECTED") {
+      if (!window.confirm("Are you sure you want to REJECT this order?")) return;
+    }
+
     setPendingOrderId(orderId);
     try {
       const res = await fetch("/api/vendor/order-status", {
@@ -183,6 +217,11 @@ export default function VendorOrdersPage() {
                     <div className="label" style={{ fontSize: "9px", opacity: 0.5 }}>
                       {new Date(order.createdAt).toLocaleString()}
                     </div>
+                    {order.files?.[0] ? (
+                      <div className="label" style={{ fontSize: "9px", opacity: 0.7 }}>
+                        {order.files[0].printType || "BW"} • {order.files[0].paperType || "A4"} • {order.files[0].copies || 1} copies{order.files[0].duplex ? " • Duplex" : ""}
+                      </div>
+                    ) : null}
                   </td>
                   <td style={{ padding: "16px" }}>
                     <span
@@ -267,7 +306,12 @@ export default function VendorOrdersPage() {
                     </div>
                     {selectedOrder.files?.map((file) => (
                       <div key={file.fileName} className="nav-text" style={{ fontSize: "13px", display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
-                        <span>{file.fileName || "Document"}</span>
+                        <span>
+                          {file.fileName || "Document"}
+                          <div className="label" style={{ fontSize: '9px', opacity: 0.65 }}>
+                            {file.printType || "BW"}, {file.paperType || "A4"}, {file.pages || 1} pages, {file.copies || 1} copies{file.duplex ? ", Duplex" : ""}{file.binding ? `, ${file.binding}` : ""}
+                          </div>
+                        </span>
                         {file.fileUrl ? (
                           <a
                             href={file.fileUrl}

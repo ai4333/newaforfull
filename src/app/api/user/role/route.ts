@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { getDefaultVendorPricingConfig } from "@/lib/vendor-defaults";
 
 function getAdminEmails() {
   const raw = process.env.ADMIN_EMAILS || "";
@@ -59,7 +60,15 @@ export async function POST(req: Request) {
       const existing = await tx.vendorProfile.findUnique({ where: { userId }, select: { id: true } });
       if (!existing) {
         await tx.vendorProfile.create({
-          data: { userId, shopName, approvalStatus: "PENDING_APPROVAL" },
+          data: {
+            userId,
+            shopName,
+            approvalStatus: "PENDING_APPROVAL",
+            acceptingOrders: false,
+            pricePerPageBW: 2,
+            pricePerPageColor: 8,
+            pricingConfig: getDefaultVendorPricingConfig(),
+          },
           select: { id: true },
         });
       }

@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { getDefaultVendorPricingConfig } from "@/lib/vendor-defaults";
 
 function getAdminEmails() {
     const raw = process.env.ADMIN_EMAILS || "";
@@ -108,6 +109,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 shopName: user.name ? `${user.name} Print Shop` : "Campus Print Vendor",
                                 approvalStatus: "PENDING_APPROVAL",
                                 acceptingOrders: false,
+                                pricePerPageBW: 2,
+                                pricePerPageColor: 8,
+                                pricingConfig: getDefaultVendorPricingConfig(),
                             },
                         });
                     }

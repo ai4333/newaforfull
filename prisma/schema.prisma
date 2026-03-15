@@ -125,6 +125,8 @@ model VendorProfile {
   ownerName        String?
   contactNumber    String?
   shopAddress      String?
+  mapLocation      String?
+  verificationId   String?
   latitude         Float?
   longitude        Float?
   openingTime      String?
@@ -193,6 +195,13 @@ model OrderFile {
   fileUrl   String
   fileName  String
   fileSize  Int
+  pages     Int      @default(1)
+  copies    Int      @default(1)
+  printType String?  @default("BW")
+  paperType String?  @default("A4")
+  binding   String?
+  duplex    Boolean  @default(false)
+  lineAmount Float   @default(0)
   createdAt DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id])

@@ -9,13 +9,13 @@ const writeLimiter = createRateLimiter(20, "1 m");
 
 const allowedMimeTypes = new Set([
   "application/pdf",
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/zip",
-  "application/x-zip-compressed",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "image/png",
   "image/jpeg",
   "image/jpg",
+  "image/webp",
 ]);
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -66,45 +66,22 @@ async function detectPageCount(fileName: string, mimeType: string, arrayBuffer: 
     return estimateDocxPages(arrayBuffer);
   }
 
-  if (mimeType === "application/msword" || ext === "doc") {
-    const approxBytesPerPage = 12000;
-    return Math.max(1, Math.ceil(arrayBuffer.byteLength / approxBytesPerPage));
-  }
-
-  if (mimeType === "application/zip" || mimeType === "application/x-zip-compressed" || ext === "zip") {
-    try {
-      const zip = await JSZip.loadAsync(arrayBuffer);
-      let total = 0;
-
-      for (const [entryName, entry] of Object.entries(zip.files)) {
-        if (entry.dir) continue;
-        const entryExt = getExtension(entryName);
-
-        if (entryExt === "pdf") {
-          const bytes = await entry.async("uint8array");
-          const entryBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-          try {
-            const pdf = await PDFDocument.load(entryBuffer, { ignoreEncryption: true });
-            total += Math.max(1, pdf.getPageCount());
-          } catch {
-            total += 1;
-          }
-        } else if (["png", "jpg", "jpeg", "webp"].includes(entryExt)) {
-          total += 1;
-        } else if (entryExt === "docx") {
-          const bytes = await entry.async("uint8array");
-          const entryBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-          total += await estimateDocxPages(entryBuffer);
-        } else if (entryExt === "doc") {
-          const bytes = await entry.async("uint8array");
-          total += Math.max(1, Math.ceil(bytes.byteLength / 12000));
-        }
+  if (
+    mimeType === "application/vnd.ms-powerpoint" ||
+    mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    ext === "ppt" ||
+    ext === "pptx"
+  ) {
+    if (ext === "pptx") {
+      try {
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const slideCount = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/i.test(n)).length;
+        return Math.max(1, slideCount);
+      } catch {
+        return Math.max(1, Math.ceil(arrayBuffer.byteLength / 40000));
       }
-
-      return Math.max(1, total);
-    } catch {
-      return 1;
     }
+    return Math.max(1, Math.ceil(arrayBuffer.byteLength / 40000));
   }
 
   return 1;
@@ -181,8 +158,8 @@ export async function POST(req: Request) {
           ? "image"
           : getExtension(fileEntry.name) === "docx"
             ? "docx_estimated"
-            : getExtension(fileEntry.name) === "doc"
-              ? "doc_estimated"
+            : ["ppt", "pptx"].includes(getExtension(fileEntry.name))
+              ? "ppt_estimated"
               : "default",
   });
 }

@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { PDFDocument } from 'pdf-lib';
 
 type Vendor = {
     id: string;
@@ -19,6 +20,17 @@ type RazorpayCreateResponse = {
     keyId: string;
     amount: number;
     currency: string;
+};
+
+type FileLine = {
+    id: string;
+    file: File;
+    pages: number;
+    copies: number;
+    printType: "BW" | "COLOR";
+    paperType: string;
+    binding: string;
+    duplex: boolean;
 };
 
 declare global {
@@ -84,6 +96,7 @@ export default function NewOrderPage() {
         binding: 'No Binding',
         instructions: '',
     });
+    const [fileLines, setFileLines] = useState<FileLine[]>([]);
 
     useEffect(() => {
         const loadVendors = async () => {
@@ -105,14 +118,54 @@ export default function NewOrderPage() {
     }, [vendors, selectedVendorId]);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0] || null;
-        if (!file) {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) {
             setOrder(prev => ({ ...prev, file: null, pages: 1 }));
             return;
         }
 
-        setOrder(prev => ({ ...prev, file, pages: 1 }));
-        setIsDetectingPages(false);
+        setIsDetectingPages(true);
+        setOrder(prev => ({ ...prev, file: files[0], pages: 1 }));
+
+        try {
+            const nextLines: FileLine[] = await Promise.all(
+                files.map(async (file, index) => {
+                    let pageCount = 1;
+
+                    // If it's a PDF, we can parse it locally without uploading
+                    if (file.type === 'application/pdf') {
+                        try {
+                            const arrayBuffer = await file.arrayBuffer();
+                            const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                            pageCount = pdfDoc.getPageCount() || 1;
+                        } catch (err) {
+                            console.warn("Failed to parse PDF pages locally:", err);
+                        }
+                    }
+
+                    return {
+                        id: `${Date.now()}-${index}`,
+                        file,
+                        pages: pageCount,
+                        copies: order.copies,
+                        printType: order.colorMode === 'Color' ? 'COLOR' : 'BW',
+                        paperType: order.paperSize,
+                        binding: order.binding,
+                        duplex: order.printSide === 'Double Side',
+                    };
+                })
+            );
+
+            setFileLines(nextLines);
+
+            // Update the global total page UI count
+            const totalDetectedPages = nextLines.reduce((sum, line) => sum + line.pages, 0);
+            if (totalDetectedPages > 0) {
+                setOrder(prev => ({ ...prev, pages: totalDetectedPages }));
+            }
+        } finally {
+            setIsDetectingPages(false);
+        }
     };
 
     const estimatedBasePrice = useMemo(() => {
@@ -133,11 +186,20 @@ export default function NewOrderPage() {
             'Lamination (Both Sides)': 35,
         };
 
-        let price = order.pages * order.copies * rate;
-        price += bindingFees[order.binding] ?? 0;
+        const sourceLines = fileLines.length > 0
+            ? fileLines
+            : [{ pages: order.pages, copies: order.copies, binding: order.binding, printType: order.colorMode === 'Color' ? 'COLOR' : 'BW', duplex: order.printSide === 'Double Side' }];
+
+        let price = 0;
+        for (const line of sourceLines) {
+            const lineRate = line.printType === 'COLOR' ? (selectedVendor.pricePerPageColor ?? 10) : (selectedVendor.pricePerPageBW ?? 2);
+            const duplexMultiplier = line.duplex ? 0.9 : 1;
+            price += (line.pages * line.copies * lineRate * duplexMultiplier);
+            price += bindingFees[line.binding] ?? 0;
+        }
 
         return Math.max(price, 10); // Minimum 10 rupees
-    }, [order.pages, order.copies, order.colorMode, order.binding, selectedVendor]);
+    }, [order.pages, order.copies, order.colorMode, order.binding, order.printSide, selectedVendor, fileLines]);
 
     const steps = [
         { title: 'Upload', sub: 'Document' },
@@ -176,18 +238,43 @@ export default function NewOrderPage() {
 
         setIsSubmitting(true);
         try {
-            let pagesForOrder = order.pages;
-            let uploadedFileMeta:
-                | {
-                    fileUrl: string;
-                    fileName: string;
-                    fileSize: number;
-                }
-                | undefined;
+            const sourceLines = fileLines.length > 0 && fileLines.some((x) => Boolean(x.file))
+                ? fileLines
+                : (order.file
+                    ? [{
+                        id: `single-${Date.now()}`,
+                        file: order.file,
+                        pages: order.pages,
+                        copies: order.copies,
+                        printType: order.colorMode === 'Color' ? 'COLOR' as const : 'BW' as const,
+                        paperType: order.paperSize,
+                        binding: order.binding,
+                        duplex: order.printSide === 'Double Side',
+                    }]
+                    : []);
 
-            if (order.file) {
+            if (sourceLines.length === 0) {
+                setError('Please upload at least one file.');
+                return;
+            }
+
+            const uploadedFiles: Array<{
+                fileUrl: string;
+                fileName: string;
+                fileSize: number;
+                pages: number;
+                copies: number;
+                printType: string;
+                paperType: string;
+                binding: string;
+                duplex: boolean;
+            }> = [];
+
+            let totalPages = 0;
+
+            for (const line of sourceLines) {
                 const formData = new FormData();
-                formData.append('file', order.file);
+                formData.append('file', line.file);
 
                 const uploadRes = await fetch('/api/upload/file', {
                     method: 'POST',
@@ -207,18 +294,24 @@ export default function NewOrderPage() {
                     pageCount: number;
                 };
 
-                if (uploadInfo.pageCount > 0) {
-                    pagesForOrder = uploadInfo.pageCount;
-                    if (uploadInfo.pageCount !== order.pages) {
-                        setOrder(prev => ({ ...prev, pages: uploadInfo.pageCount }));
-                    }
-                }
+                const detectedPages = Math.max(1, uploadInfo.pageCount || 1);
+                totalPages += detectedPages;
 
-                uploadedFileMeta = {
+                uploadedFiles.push({
                     fileUrl: uploadInfo.fileUrl,
                     fileName: uploadInfo.fileName,
                     fileSize: uploadInfo.fileSize,
-                };
+                    pages: detectedPages,
+                    copies: line.copies,
+                    printType: line.printType,
+                    paperType: line.paperType,
+                    binding: line.binding,
+                    duplex: line.duplex,
+                });
+            }
+
+            if (totalPages > 0 && totalPages !== order.pages) {
+                setOrder(prev => ({ ...prev, pages: totalPages }));
             }
 
             const createRes = await fetch('/api/order/create', {
@@ -226,13 +319,13 @@ export default function NewOrderPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     vendorId: selectedVendorId,
-                    pages: pagesForOrder,
+                    pages: totalPages || order.pages,
                     printType: order.colorMode === "Color" ? "COLOR" : "BW",
                     copies: order.copies,
                     binding: order.binding,
                     deliveryType: "PICKUP",
                     deliveryAddress: undefined,
-                    files: uploadedFileMeta ? [uploadedFileMeta] : undefined,
+                    files: uploadedFiles,
                 }),
             });
 
@@ -370,7 +463,7 @@ export default function NewOrderPage() {
                                     }}
                                     onClick={() => document.getElementById('file-input')?.click()}
                                 >
-                                    <input id="file-input" type="file" hidden onChange={handleFileChange} accept=".pdf,.doc,.docx,.zip,.png,.jpg,.jpeg" />
+                                    <input id="file-input" type="file" hidden onChange={handleFileChange} accept=".pdf,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp" multiple />
                                     <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', opacity: 0.4 }}>
                                         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -388,9 +481,36 @@ export default function NewOrderPage() {
                                             {order.pages} pages detected
                                         </div>
                                     )}
-                                    <div className="label" style={{ fontSize: '9px', opacity: 0.4 }}>PDF, DOC, DOCX, ZIP, PNG, JPG (MAX 20MB)</div>
+                                    <div className="label" style={{ fontSize: '9px', opacity: 0.4 }}>PDF, DOCX, PPT, PPTX, PNG, JPG, WEBP (MAX 20MB each)</div>
                                     <div className="label" style={{ fontSize: '8px', opacity: 0.5 }}>Pages are auto-detected from uploaded file type.</div>
                                 </div>
+
+                                {fileLines.length > 0 && (
+                                    <div style={{ marginTop: '16px', display: 'grid', gap: '10px' }}>
+                                        {fileLines.map((line) => (
+                                            <div key={line.id} className="paper-sheet" style={{ padding: '10px' }}>
+                                                <div className="nav-text" style={{ fontSize: '12px', marginBottom: '8px' }}>{line.file.name}</div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: '8px' }}>
+                                                    <select className="ink-input" value={line.printType} onChange={(e) => setFileLines(prev => prev.map(f => f.id === line.id ? { ...f, printType: e.target.value as 'BW' | 'COLOR' } : f))}>
+                                                        <option value="BW">B&W</option>
+                                                        <option value="COLOR">Color</option>
+                                                    </select>
+                                                    <select className="ink-input" value={line.paperType} onChange={(e) => setFileLines(prev => prev.map(f => f.id === line.id ? { ...f, paperType: e.target.value } : f))}>
+                                                        <option>A4</option>
+                                                        <option>A3</option>
+                                                    </select>
+                                                    <select className="ink-input" value={line.binding} onChange={(e) => setFileLines(prev => prev.map(f => f.id === line.id ? { ...f, binding: e.target.value } : f))}>
+                                                        {bindingOptions.map((opt) => <option key={opt}>{opt}</option>)}
+                                                    </select>
+                                                    <input type="number" min={1} className="ink-input" value={line.copies} onChange={(e) => setFileLines(prev => prev.map(f => f.id === line.id ? { ...f, copies: Math.max(1, Number(e.target.value) || 1) } : f))} />
+                                                    <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px' }}>
+                                                        <input type="checkbox" checked={line.duplex} onChange={(e) => setFileLines(prev => prev.map(f => f.id === line.id ? { ...f, duplex: e.target.checked } : f))} /> Duplex
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 

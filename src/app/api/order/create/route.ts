@@ -21,6 +21,12 @@ const requestSchema = z.object({
         fileUrl: z.string().min(1),
         fileName: z.string().min(1),
         fileSize: z.number().int().positive(),
+        pages: z.number().int().positive().optional(),
+        copies: z.number().int().positive().optional(),
+        printType: z.string().min(1).max(40).optional(),
+        paperType: z.string().min(1).max(40).optional(),
+        binding: z.string().min(1).max(60).optional(),
+        duplex: z.boolean().optional(),
       })
     )
     .optional(),
@@ -70,13 +76,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Selected vendor is not accepting orders" }, { status: 409 });
   }
 
-  const pages = parsed.data.pages ?? 1;
-  const copies = parsed.data.copies ?? 1;
-  const printType = (parsed.data.printType || "BW").toUpperCase();
-  const ratePerPage = printType === "COLOR"
-    ? (vendor.pricePerPageColor ?? 8)
-    : (vendor.pricePerPageBW ?? 2);
-
   const bindingFeeByType: Record<string, number> = {
     "NO BINDING": 0,
     "SPIRAL BINDING": 30,
@@ -87,10 +86,44 @@ export async function POST(req: Request) {
     "LAMINATION (FRONT ONLY)": 20,
     "LAMINATION (BOTH SIDES)": 35,
   };
-  const bindingLabel = (parsed.data.binding || "No Binding").toUpperCase();
-  const bindingFee = bindingFeeByType[bindingLabel] ?? 0;
+  const normalizedFiles = (parsed.data.files && parsed.data.files.length > 0)
+    ? parsed.data.files.map((f) => ({
+      ...f,
+      pages: f.pages ?? 1,
+      copies: f.copies ?? 1,
+      printType: (f.printType || parsed.data.printType || "BW").toUpperCase(),
+      paperType: f.paperType || "A4",
+      binding: f.binding || parsed.data.binding || "No Binding",
+      duplex: Boolean(f.duplex),
+    }))
+    : [{
+      fileUrl: "",
+      fileName: "Document",
+      fileSize: 1,
+      pages: parsed.data.pages ?? 1,
+      copies: parsed.data.copies ?? 1,
+      printType: (parsed.data.printType || "BW").toUpperCase(),
+      paperType: "A4",
+      binding: parsed.data.binding || "No Binding",
+      duplex: false,
+    }];
 
-  const baseAmount = Number((pages * copies * ratePerPage + bindingFee).toFixed(2));
+  const computedLines = normalizedFiles.map((f) => {
+    const ratePerPage = f.printType === "COLOR" ? (vendor.pricePerPageColor ?? 8) : (vendor.pricePerPageBW ?? 2);
+    const bindingFee = bindingFeeByType[f.binding.toUpperCase()] ?? 0;
+    const duplexMultiplier = f.duplex ? 0.9 : 1;
+    const lineAmount = Number((f.pages * f.copies * ratePerPage * duplexMultiplier + bindingFee).toFixed(2));
+
+    return {
+      ...f,
+      lineAmount,
+    };
+  });
+
+  const baseAmount = Number(computedLines.reduce((sum, f) => sum + f.lineAmount, 0).toFixed(2));
+  const aggregatePages = computedLines.reduce((sum, f) => sum + f.pages, 0);
+  const aggregateCopies = computedLines.reduce((sum, f) => sum + f.copies, 0);
+  const aggregatePrintType = computedLines.some((f) => f.printType === "COLOR") ? "COLOR" : "BW";
 
   const breakdown = calculateOrderBreakdown(baseAmount);
 
@@ -101,18 +134,25 @@ export async function POST(req: Request) {
         vendorId: parsed.data.vendorId,
         status: "PAYMENT_PENDING",
         ...breakdown,
-        pages,
-        printType,
-        copies,
+        pages: aggregatePages,
+        printType: aggregatePrintType,
+        copies: aggregateCopies,
         binding: parsed.data.binding,
         deliveryType: parsed.data.deliveryType,
         deliveryAddress: parsed.data.deliveryAddress,
         files: parsed.data.files
           ? {
-            create: parsed.data.files.map((file) => ({
+            create: computedLines.map((file) => ({
               fileUrl: file.fileUrl,
               fileName: file.fileName,
               fileSize: file.fileSize,
+              pages: file.pages,
+              copies: file.copies,
+              printType: file.printType,
+              paperType: file.paperType,
+              binding: file.binding,
+              duplex: file.duplex,
+              lineAmount: file.lineAmount,
             })),
           }
           : undefined,

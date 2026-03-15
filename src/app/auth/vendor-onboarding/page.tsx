@@ -1,19 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 type VendorForm = {
   ownerName: string;
   phone: string;
   shopName: string;
   shopAddress: string;
-  openingTime: string;
-  closingTime: string;
-  servicesAvailable: string;
-  pricePerPageBW: string;
-  pricePerPageColor: string;
-  upiId: string;
+  mapLocation: string;
+  verificationId: string;
 };
 
 const initialForm: VendorForm = {
@@ -21,23 +18,26 @@ const initialForm: VendorForm = {
   phone: "",
   shopName: "",
   shopAddress: "",
-  openingTime: "09:00",
-  closingTime: "18:00",
-  servicesAvailable: "BW Print, Color Print",
-  pricePerPageBW: "2",
-  pricePerPageColor: "8",
-  upiId: "",
+  mapLocation: "",
+  verificationId: "",
 };
 
 export default function VendorOnboardingPage() {
+  const { data: session } = useSession();
   const router = useRouter();
   const [form, setForm] = useState<VendorForm>(initialForm);
   const [approvalStatus, setApprovalStatus] = useState<string>("PENDING_APPROVAL");
+  const [completed, setCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  const isPendingLocked = useMemo(
+    () => approvalStatus === "PENDING_APPROVAL" && completed,
+    [approvalStatus, completed]
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -54,6 +54,7 @@ export default function VendorOnboardingPage() {
         const data = await res.json();
         const profile = data.profile;
         setApprovalStatus(profile?.approvalStatus || "PENDING_APPROVAL");
+        setCompleted(Boolean(data?.completed));
 
         if (profile) {
           setForm({
@@ -61,12 +62,8 @@ export default function VendorOnboardingPage() {
             phone: profile.contactNumber || "",
             shopName: profile.shopName || "",
             shopAddress: profile.shopAddress || "",
-            openingTime: profile.openingTime || "09:00",
-            closingTime: profile.closingTime || "18:00",
-            servicesAvailable: Array.isArray(profile.servicesAvailable) ? profile.servicesAvailable.join(", ") : "",
-            pricePerPageBW: profile.pricePerPageBW?.toString() || "2",
-            pricePerPageColor: profile.pricePerPageColor?.toString() || "8",
-            upiId: profile.upiId || "",
+            mapLocation: profile.mapLocation || "",
+            verificationId: profile.verificationId || "",
           });
         }
 
@@ -83,37 +80,36 @@ export default function VendorOnboardingPage() {
     load();
   }, [router]);
 
+  useEffect(() => {
+    if (!isPendingLocked) return;
+
+    const timer = setInterval(async () => {
+      const res = await fetch("/api/vendor/onboarding", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const status = data?.profile?.approvalStatus;
+      setApprovalStatus(status || "PENDING_APPROVAL");
+      if (status === "APPROVED") {
+        router.replace("/vendor/dashboard");
+      }
+    }, 8000);
+
+    return () => clearInterval(timer);
+  }, [isPendingLocked, router]);
+
   const save = async () => {
     setError("");
     setSuccess("");
     setFieldErrors({});
     setSaving(true);
     try {
-      const pricePerPageBW = Number(form.pricePerPageBW);
-      const pricePerPageColor = Number(form.pricePerPageColor);
-      const cleanedServices = form.servicesAvailable.split(",").map((x) => x.trim()).filter(Boolean);
-
-      if (!Number.isFinite(pricePerPageBW) || !Number.isFinite(pricePerPageColor)) {
-        setError("BW and Color prices must be valid numbers.");
-        return;
-      }
-
-      if (cleanedServices.length === 0) {
-        setError("Add at least one service in Services Available.");
-        return;
-      }
-
       const payload = {
         ownerName: form.ownerName,
         phone: form.phone,
         shopName: form.shopName,
         shopAddress: form.shopAddress,
-        openingTime: form.openingTime,
-        closingTime: form.closingTime,
-        servicesAvailable: cleanedServices,
-        pricePerPageBW,
-        pricePerPageColor,
-        upiId: form.upiId,
+        mapLocation: form.mapLocation || undefined,
+        verificationId: form.verificationId,
       };
 
       const res = await fetch("/api/vendor/onboarding", {
@@ -132,7 +128,8 @@ export default function VendorOnboardingPage() {
       }
 
       setApprovalStatus("PENDING_APPROVAL");
-      setSuccess("Request sent successfully. Your profile is pending admin approval.");
+      setCompleted(true);
+      setSuccess("Application submitted successfully.");
     } catch {
       setError("Submission failed due to a network/server issue. Please retry.");
     } finally {
@@ -144,11 +141,25 @@ export default function VendorOnboardingPage() {
     return <div className="paper-sheet">Loading vendor onboarding...</div>;
   }
 
+  if (isPendingLocked) {
+    return (
+      <div style={{ maxWidth: 760, margin: "40px auto" }}>
+        <div className="paper-sheet" style={{ padding: 24 }}>
+          <h2 className="fraunces text-ink" style={{ fontSize: "1.7rem", marginBottom: 8 }}>Vendor Application Submitted</h2>
+          <div className="label" style={{ marginBottom: 12 }}>Status: Pending Approval</div>
+          <p className="lora italic" style={{ opacity: 0.75 }}>
+            Your shop is currently under review. You will be notified once approved.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: "980px", margin: "24px auto", display: "grid", gap: "16px" }}>
       <section className="paper-sheet" style={{ padding: "20px" }}>
-        <h2 className="fraunces text-ink" style={{ fontSize: "1.7rem", marginBottom: "8px" }}>Complete Vendor Registration</h2>
-        <p className="lora italic" style={{ opacity: 0.75, marginBottom: "10px" }}>Add your print shop profile and submit for admin approval.</p>
+        <h2 className="fraunces text-ink" style={{ fontSize: "1.7rem", marginBottom: "8px" }}>Vendor Registration</h2>
+        <p className="lora italic" style={{ opacity: 0.75, marginBottom: "10px" }}>Submit your shop identity details for admin approval.</p>
         <div className="label" style={{ fontSize: "10px" }}>Current status: {approvalStatus}</div>
       </section>
 
@@ -163,37 +174,20 @@ export default function VendorOnboardingPage() {
       ) : null}
 
       <section className="paper-sheet" style={{ padding: "20px" }}>
-        <h3 className="fraunces text-ink" style={{ fontSize: "1.1rem", marginBottom: "12px" }}>Owner & Contact</h3>
-        <div className="admin-grid-3" style={{ gap: "12px", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+        <h3 className="fraunces text-ink" style={{ fontSize: "1.1rem", marginBottom: "12px" }}>Business Identity</h3>
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+          <input className="ink-input" placeholder="Shop Name" value={form.shopName} onChange={(e) => setForm({ ...form, shopName: e.target.value })} />
           <input className="ink-input" placeholder="Owner Name" value={form.ownerName} onChange={(e) => setForm({ ...form, ownerName: e.target.value })} />
           <input className="ink-input" placeholder="Phone Number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <input className="ink-input" placeholder="UPI ID" value={form.upiId} onChange={(e) => setForm({ ...form, upiId: e.target.value })} />
-        </div>
-      </section>
-
-      <section className="paper-sheet" style={{ padding: "20px" }}>
-        <h3 className="fraunces text-ink" style={{ fontSize: "1.1rem", marginBottom: "12px" }}>Shop Details</h3>
-        <div style={{ display: "grid", gap: "12px" }}>
-          <input className="ink-input" placeholder="Shop Name" value={form.shopName} onChange={(e) => setForm({ ...form, shopName: e.target.value })} />
-          <textarea className="ink-input" placeholder="Shop Address" rows={3} value={form.shopAddress} onChange={(e) => setForm({ ...form, shopAddress: e.target.value })} />
-          <textarea className="ink-input" placeholder="Services (comma separated)" rows={2} value={form.servicesAvailable} onChange={(e) => setForm({ ...form, servicesAvailable: e.target.value })} />
-        </div>
-      </section>
-
-      <section className="paper-sheet" style={{ padding: "20px" }}>
-        <h3 className="fraunces text-ink" style={{ fontSize: "1.1rem", marginBottom: "12px" }}>Hours & Pricing</h3>
-        <div className="admin-grid-4" style={{ gap: "12px", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))" }}>
-          <input className="ink-input" placeholder="Opening Time" value={form.openingTime} onChange={(e) => setForm({ ...form, openingTime: e.target.value })} />
-          <input className="ink-input" placeholder="Closing Time" value={form.closingTime} onChange={(e) => setForm({ ...form, closingTime: e.target.value })} />
-          <input className="ink-input" placeholder="BW price/page" value={form.pricePerPageBW} onChange={(e) => setForm({ ...form, pricePerPageBW: e.target.value })} />
-          <input className="ink-input" placeholder="Color price/page" value={form.pricePerPageColor} onChange={(e) => setForm({ ...form, pricePerPageColor: e.target.value })} />
+          <input className="ink-input" value={session?.user?.email || ""} disabled />
+          <textarea className="ink-input" placeholder="Shop Address" rows={3} value={form.shopAddress} onChange={(e) => setForm({ ...form, shopAddress: e.target.value })} style={{ gridColumn: "1 / -1" }} />
+          <input className="ink-input" placeholder="Google Map Location Link (optional)" value={form.mapLocation} onChange={(e) => setForm({ ...form, mapLocation: e.target.value })} style={{ gridColumn: "1 / -1" }} />
+          <input className="ink-input" placeholder="ID / Verification Number" value={form.verificationId} onChange={(e) => setForm({ ...form, verificationId: e.target.value })} style={{ gridColumn: "1 / -1" }} />
         </div>
       </section>
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button className="btn-signup" onClick={save} disabled={saving}>
-          {saving ? "Submitting..." : "Submit for Approval"}
-        </button>
+        <button className="btn-signup" onClick={save} disabled={saving}>{saving ? "Submitting..." : "Submit for Approval"}</button>
       </div>
     </div>
   );

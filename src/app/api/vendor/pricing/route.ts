@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createRateLimiter, shouldBypassRateLimit } from "@/lib/ratelimit";
 import { requireActiveUser } from "@/lib/auth-helpers";
+import { getDefaultVendorPricingConfig } from "@/lib/vendor-defaults";
 
 const paperSchema = z.object({
   size: z.string().min(1),
@@ -75,17 +76,19 @@ export async function GET() {
   let pricing = row?.pricingConfig ?? null;
 
   if (!pricing) {
-    pricing = {
-      paperPrices: [
-        {
-          size: "A4",
-          bw: row?.pricePerPageBW ?? 2,
-          color: row?.pricePerPageColor ?? 8,
-        },
-      ],
-      gsmPrices: [],
-      finishingPrices: [],
-    };
+    const defaults = getDefaultVendorPricingConfig();
+    defaults.paperPrices = defaults.paperPrices.map((p: { size: string; bw: number; color: number }) => ({
+      ...p,
+      bw: p.size === "A4" ? (row?.pricePerPageBW ?? p.bw) : p.bw,
+      color: p.size === "A4" ? (row?.pricePerPageColor ?? p.color) : p.color,
+    }));
+
+    pricing = defaults;
+
+    await prisma.vendorProfile.update({
+      where: { id: vendor.profile.id },
+      data: { pricingConfig: defaults },
+    });
   }
 
   return NextResponse.json({ pricing });
