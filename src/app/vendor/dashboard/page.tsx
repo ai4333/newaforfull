@@ -18,12 +18,15 @@ export default function VendorDashboard() {
     const [toggleLoading, setToggleLoading] = useState(false);
     const [toggleError, setToggleError] = useState("");
 
+    const [stats, setStats] = useState({ ordersToday: 0, pendingCount: 0, readyCount: 0, weekEarnings: 0 });
+
     useEffect(() => {
         const load = async () => {
             try {
-                const [ordersRes, settingsRes] = await Promise.all([
+                const [ordersRes, settingsRes, statsRes] = await Promise.all([
                     fetch("/api/vendor/orders"),
                     fetch("/api/vendor/settings"),
+                    fetch("/api/vendor/stats"),
                 ]);
                 if (ordersRes.ok) {
                     const data = await ordersRes.json();
@@ -33,31 +36,16 @@ export default function VendorDashboard() {
                     const data = await settingsRes.json();
                     setAcceptingOrders(Boolean(data?.settings?.acceptingOrders));
                 }
+                if (statsRes.ok) {
+                    const data = await statsRes.json();
+                    setStats(data.stats || { ordersToday: 0, pendingCount: 0, readyCount: 0, weekEarnings: 0 });
+                }
             } finally {
                 setIsLoading(false);
             }
         };
         load();
     }, []);
-
-    const stats = useMemo(() => {
-        const today = new Date();
-        const weekStart = new Date();
-        weekStart.setDate(today.getDate() - 7);
-
-        const ordersToday = orders.filter((order) => {
-            const created = new Date(order.createdAt);
-            return created.toDateString() === today.toDateString();
-        }).length;
-
-        const pendingCount = orders.filter((order) => order.status === "PAYMENT_PENDING" || order.status === "PENDING").length;
-        const readyCount = orders.filter((order) => order.status === "READY").length;
-        const weekEarnings = orders
-            .filter((order) => new Date(order.createdAt) >= weekStart)
-            .reduce((sum, order) => sum + (order.vendorEarning || 0), 0);
-
-        return { ordersToday, pendingCount, readyCount, weekEarnings };
-    }, [orders]);
 
     const toggleService = async () => {
         setToggleError("");

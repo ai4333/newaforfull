@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { OrderStatus } from "@prisma/client";
-import { resolveStoredFileUrl } from "@/lib/supabase-server";
 import { requireActiveUser } from "@/lib/auth-helpers";
 
 export async function GET(req: Request) {
@@ -35,24 +34,19 @@ export async function GET(req: Request) {
       vendorId: vendorProfile.id,
       status: status ? { equals: status } : undefined,
     },
-    include: {
-      files: true,
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      files: { select: { fileName: true, fileUrl: true } },
       student: { select: { id: true, name: true, email: true } },
     },
     orderBy: { createdAt: "desc" },
+    take: 120,
   });
 
-  const resolvedOrders = await Promise.all(
-    orders.map(async (order) => ({
-      ...order,
-      files: await Promise.all(
-        order.files.map(async (file) => ({
-          ...file,
-          fileUrl: await resolveStoredFileUrl(file.fileUrl),
-        }))
-      ),
-    }))
+  return NextResponse.json(
+    { orders },
+    { headers: { "Cache-Control": "private, max-age=10" } }
   );
-
-  return NextResponse.json({ orders: resolvedOrders });
 }

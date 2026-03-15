@@ -64,6 +64,22 @@ export default function VendorOrdersPage() {
     }
   };
 
+  const handleSelectOrder = async (order: VendorOrder) => {
+    setSelectedOrder(order);
+    // Fetch file URLs on demand
+    try {
+      const res = await fetch(`/api/vendor/orders/${order.id}/files`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.files) {
+          setSelectedOrder((prev) => prev && prev.id === order.id ? { ...prev, files: data.files } : prev);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load file URLs", err);
+    }
+  };
+
   const filteredOrders = orders.filter((order) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -195,7 +211,7 @@ export default function VendorOrdersPage() {
                       </button>
                     ))}
                     <button
-                      onClick={() => setSelectedOrder(order)}
+                      onClick={() => handleSelectOrder(order)}
                       className="btn-signin"
                       style={{ padding: "4px 12px", fontSize: "10px", width: "auto" }}
                     >
@@ -247,11 +263,32 @@ export default function VendorOrdersPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
                   <div>
                     <div className="label" style={{ fontSize: "8px", opacity: 0.5 }}>
-                      FILE
+                      FILES
                     </div>
-                    <div className="nav-text" style={{ fontSize: "13px" }}>
-                      {selectedOrder.files?.[0]?.fileName || "Document"}
-                    </div>
+                    {selectedOrder.files?.map((file) => (
+                      <div key={file.fileName} className="nav-text" style={{ fontSize: "13px", display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                        <span>{file.fileName || "Document"}</span>
+                        {file.fileUrl ? (
+                          <a
+                            href={file.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-signin"
+                            style={{ padding: "4px 8px", fontSize: "10px", width: "auto" }}
+                          >
+                            Download
+                          </a>
+                        ) : (
+                          <button
+                            className="btn-signin"
+                            style={{ padding: "4px 8px", fontSize: "10px", width: "auto", opacity: 0.5 }}
+                            disabled
+                          >
+                            Fetching...
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                   <div>
                     <div className="label" style={{ fontSize: "8px", opacity: 0.5 }}>

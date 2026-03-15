@@ -23,6 +23,8 @@ export default function StudentDashboard() {
     const [profile, setProfile] = useState<StudentProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    const [stats, setStats] = useState({ activeCount: 0, totalOrders: 0, totalSpent: 0 });
+
     useEffect(() => {
         const load = async () => {
             try {
@@ -36,10 +38,18 @@ export default function StudentDashboard() {
                     setProfile(profileData.profile || null);
                 }
 
-                const res = await fetch("/api/student/orders");
+                const [res, statsRes] = await Promise.all([
+                    fetch("/api/student/orders"),
+                    fetch("/api/student/stats")
+                ]);
+
                 if (res.ok) {
                     const data = await res.json();
                     setOrders(data.orders || []);
+                }
+                if (statsRes.ok) {
+                    const data = await statsRes.json();
+                    setStats(data.stats || { activeCount: 0, totalOrders: 0, totalSpent: 0 });
                 }
             } finally {
                 setIsLoading(false);
@@ -47,17 +57,6 @@ export default function StudentDashboard() {
         };
         load();
     }, []);
-
-    const stats = useMemo(() => {
-        const activeStatuses = new Set(["PENDING", "PAYMENT_PENDING", "PAID", "ACCEPTED", "READY"]);
-        const activeCount = orders.filter((order) => activeStatuses.has(order.status)).length;
-        const totalSpent = orders.reduce((sum, order) => sum + (order.totalPaid || 0), 0);
-        return {
-            activeCount,
-            totalOrders: orders.length,
-            totalSpent,
-        };
-    }, [orders]);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>

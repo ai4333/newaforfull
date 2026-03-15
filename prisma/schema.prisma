@@ -181,6 +181,10 @@ model Order {
   binding         String?
   deliveryType    DeliveryType @default(PICKUP)
   deliveryAddress String?
+
+  @@index([studentId, createdAt(sort: Desc)])
+  @@index([vendorId, status, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
 }
 
 model OrderFile {
@@ -192,6 +196,8 @@ model OrderFile {
   createdAt DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId, createdAt(sort: Desc)])
 }
 
 model Payout {
