@@ -291,7 +291,7 @@ export default function Home() {
             <div className="founder-role">Founder</div>
             <div className="founder-divider"></div>
             <p className="founder-bio">
-              <span className="typewriter" data-speed="10">Walking to printers felt like bad design. So I redesigned it.</span>
+              <span className="typewriter" data-speed="10">行列は他のことのためにある。 印刷のために並ぶ必要はない。 そして、もうすぐ取りに来る必要すらなくなる。</span>
             </p>
             <span className="founder-sig">Nikhil Sridhara</span>
             <div className="sig-underline"></div>
